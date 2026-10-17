@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Crib mockup (design reference)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0;background:#0B0C0E;min-height:100vh;display:flex;justify-content:center;align-items:flex-start;padding:24px 0}
+button,input{font:inherit}
+a{color:#7DBBFF}a:hover{color:#CFE5FF}
+</style>
+<div style="width: 390px; height: 844px; box-sizing: border-box; padding: 24px 20px 20px; background: #121418; color: #ECE8DF; font-family: 'IBM Plex Sans', sans-serif; display: flex; flex-direction: column; gap: 14px">
+
+<header style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.08em; color: #A3A9B3">CIPHER 02 · No. 017</div>
+<h1 style="margin: 0; font-size: 26px; font-weight: 600; line-height: 1.15">Crib</h1>
+<p style="margin: 0; font-size: 14px; line-height: 1.4; color: #A3A9B3">Letters swap in pairs, and no letter ever becomes itself. Slide known words along the message to find the swaps.</p>
+</div>
+<button aria-label="How to play" style="flex: none; width: 44px; height: 44px; border-radius: 22px; border: 1px solid #2F343D; background: #1B1E24; color: #ECE8DF; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14"></path><path d="M12 17.5h.01"></path></svg></button>
+</header>
+
+<section aria-label="Intercepted message" style="display: flex; flex-direction: column; gap: 8px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.08em; color: #A3A9B3">INTERCEPT</div>
+
+<div style="display: grid; grid-template-columns: repeat(11, minmax(0, 1fr)); gap: 4px; font-family: 'IBM Plex Mono', monospace; text-align: center">
+<div style="display: flex; flex-direction: column; gap: 3px"><div style="font-size: 10px; color: #A3A9B3">1</div><div style="height: 34px; border-radius: 6px; background: #262A32; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600">U</div><div style="font-size: 15px; font-weight: 600; color: #7DBBFF">M</div></div>
+<div style="display: flex; flex-direction: column; gap: 3px"><div style="font-size: 10px; color: #A3A9B3">2</div><div style="height: 34px; border-radius: 6px; background: #262A32; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600">K</div><div style="font-size: 15px; color: #8F96A1">·</div></div>
+<div style="display: flex; flex-direction: column; gap: 3px"><div style="font-size: 10px; color: #A3A9B3">3</div><div style="height: 34px; border-radius: 6px; background: #262A32; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600">K</div><div style="font-size: 15px; color: #8F96A1">·</div></div>
+<div style="display: flex; flex-direction: column; gap: 3px"><div style="font-size: 10px; color: #A3A9B3">4</div><div style="height: 34px; border-radius: 6px; background: #262A32; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600">O</div><div style="font-size: 15px; color: #8F96A1">·</div></div>
+<div style="display: flex; flex-direction: column; gap: 3px"><div style="font-size: 10px; color: #A3A9B3">5</div><div style="height: 34px; border-radius: 6px; background: #262A32; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600">G</div><div style="font-size: 15px; font-weight: 600; color: #F2B544">A</div></div>
+<div style="display: flex; flex-direction: column; gap: 3px"><div style="font-size: 10px; color: #A3A9B3">6</div><div style="height: 34px; border-radius: 6px; background: #262A32; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600">O</div><div style="font-size: 15px; color: #8F96A1">·</div></div>
+<div style="display: flex; flex-direction: column; gap: 3px"><div style="font-size: 10px; color: #A3A9B3">7</div><div style="height: 34px; border-radius: 6px; background: #262A32; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600">O</div><div style="font-size: 15px; color: #8F96A1">·</div></div>
+<div style="display: flex; flex-direction: column; gap: 3px"><div style="font-size: 10px; color: #A3A9B3">8</div><div style="height: 34px; border-radius: 6px; background: #262A32; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600">Y</div><div style="font-size: 15px; color: #8F96A1">·</div></div>
+<div style="display: flex; flex-direction: column; gap: 3px"><div style="font-size: 10px; color: #A3A9B3">9</div><div style="height: 34px; border-radius: 6px; background: #262A32; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600">K</div><div style="font-size: 15px; color: #8F96A1">·</div></div>
+<div style="display: flex; flex-direction: column; gap: 3px"><div style="font-size: 10px; color: #A3A9B3">10</div><div style="height: 34px; border-radius: 6px; background: #262A32; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600">T</div><div style="font-size: 15px; color: #8F96A1">·</div></div>
+<div style="display: flex; flex-direction: column; gap: 3px"><div style="font-size: 10px; color: #A3A9B3">11</div><div style="height: 34px; border-radius: 6px; background: #262A32; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600">V</div><div style="font-size: 15px; font-weight: 600; color: #7DBBFF">L</div></div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(11, minmax(0, 1fr)); gap: 4px; font-family: 'IBM Plex Mono', monospace; text-align: center">
+<div style="display: flex; flex-direction: column; gap: 3px"><div style="font-size: 10px; color: #A3A9B3">12</div><div style="height: 34px; border-radius: 6px; background: #262A32; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600">R</div><div style="font-size: 15px; font-weight: 600; color: #F2B544">D</div></div>
+<div style="display: flex; flex-direction: column; gap: 3px"><div style="font-size: 10px; color: #A3A9B3">13</div><div style="height: 34px; border-radius: 6px; background: #1D3550; box-shadow: inset 0 0 0 2px #7DBBFF; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600">U</div><div style="font-size: 15px; font-weight: 600; color: #7DBBFF">M</div></div>
+<div style="display: flex; flex-direction: column; gap: 3px"><div style="font-size: 10px; color: #A3A9B3">14</div><div style="height: 34px; border-radius: 6px; background: #1D3550; box-shadow: inset 0 0 0 2px #7DBBFF; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600">W</div><div style="font-size: 15px; font-weight: 600; color: #7DBBFF">I</div></div>
+<div style="display: flex; flex-direction: column; gap: 3px"><div style="font-size: 10px; color: #A3A9B3">15</div><div style="height: 34px; border-radius: 6px; background: #1D3550; box-shadow: inset 0 0 0 2px #7DBBFF; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600">V</div><div style="font-size: 15px; font-weight: 600; color: #7DBBFF">L</div></div>
+<div style="display: flex; flex-direction: column; gap: 3px"><div style="font-size: 10px; color: #A3A9B3">16</div><div style="height: 34px; border-radius: 6px; background: #1D3550; box-shadow: inset 0 0 0 2px #7DBBFF; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600">V</div><div style="font-size: 15px; font-weight: 600; color: #7DBBFF">L</div></div>
+<div style="display: flex; flex-direction: column; gap: 3px"><div style="font-size: 10px; color: #A3A9B3">17</div><div style="height: 34px; border-radius: 6px; background: #262A32; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600">G</div><div style="font-size: 15px; font-weight: 600; color: #F2B544">A</div></div>
+<div style="display: flex; flex-direction: column; gap: 3px"><div style="font-size: 10px; color: #A3A9B3">18</div><div style="height: 34px; border-radius: 6px; background: #262A32; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600">O</div><div style="font-size: 15px; color: #8F96A1">·</div></div>
+<div style="display: flex; flex-direction: column; gap: 3px"><div style="font-size: 10px; color: #A3A9B3">19</div><div style="height: 34px; border-radius: 6px; background: #2E2614; box-shadow: inset 0 0 0 2px #F2B544; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600">R</div><div style="font-size: 15px; font-weight: 600; color: #F2B544">D</div></div>
+<div style="display: flex; flex-direction: column; gap: 3px"><div style="font-size: 10px; color: #A3A9B3">20</div><div style="height: 34px; border-radius: 6px; background: #2E2614; box-shadow: inset 0 0 0 2px #F2B544; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600">G</div><div style="font-size: 15px; font-weight: 600; color: #F2B544">A</div></div>
+<div style="display: flex; flex-direction: column; gap: 3px"><div style="font-size: 10px; color: #A3A9B3">21</div><div style="height: 34px; border-radius: 6px; background: #2E2614; box-shadow: inset 0 0 0 2px #F2B544; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600">I</div><div style="font-size: 15px; font-weight: 600; color: #F2B544">W</div></div>
+<div style="display: flex; flex-direction: column; gap: 3px"><div style="font-size: 10px; color: #A3A9B3">22</div><div style="height: 34px; border-radius: 6px; background: #2E2614; box-shadow: inset 0 0 0 2px #F2B544; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600">X</div><div style="font-size: 15px; font-weight: 600; color: #F2B544">N</div></div>
+<div style="grid-column: 2 / span 4; font-family: 'IBM Plex Sans', sans-serif; font-size: 11px; font-weight: 500; color: #7DBBFF">MILL · locked</div>
+<div style="grid-column: 8 / span 4; font-family: 'IBM Plex Sans', sans-serif; font-size: 11px; font-weight: 500; color: #F2B544">DAWN · trying</div>
+</div>
+</section>
+
+<section aria-label="Placing DAWN" style="background: #1B1E24; border: 1px solid #2F343D; border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 14px; font-weight: 600">Sliding <span style="font-family: 'IBM Plex Mono', monospace; color: #F2B544">DAWN</span> along the message</div>
+<div aria-hidden="true" style="display: grid; grid-template-columns: repeat(19, minmax(0, 1fr)); gap: 3px">
+<div style="height: 16px; border-radius: 3px; background: #2F343D"></div>
+<div style="height: 16px; border-radius: 3px; background: #2F343D"></div>
+<div style="height: 16px; border-radius: 3px; background: #2F343D"></div>
+<div style="height: 16px; border-radius: 3px; background: #2F343D"></div>
+<div style="height: 16px; border-radius: 3px; background: #2F343D"></div>
+<div style="height: 16px; border-radius: 3px; background: #2F343D"></div>
+<div style="height: 16px; border-radius: 3px; background: #2F343D"></div>
+<div style="height: 16px; border-radius: 3px; background: #2F343D"></div>
+<div style="height: 16px; border-radius: 3px; background: #2F343D"></div>
+<div style="height: 16px; border-radius: 3px; background: #2F343D"></div>
+<div style="height: 16px; border-radius: 3px; background: #2F343D"></div>
+<div style="height: 16px; box-sizing: border-box; border-radius: 3px; border: 1.5px solid #ECE8DF; display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', monospace; font-size: 10px; line-height: 1">=</div>
+<div style="height: 16px; border-radius: 3px; background: #2F343D"></div>
+<div style="height: 16px; border-radius: 3px; background: #2F343D"></div>
+<div style="height: 16px; border-radius: 3px; background: #2F343D"></div>
+<div style="height: 16px; border-radius: 3px; background: #2F343D"></div>
+<div style="height: 16px; border-radius: 3px; background: #2F343D"></div>
+<div style="height: 16px; border-radius: 3px; background: #2F343D"></div>
+<div style="height: 16px; border-radius: 3px; background: #F2B544"></div>
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #A3A9B3">1</div>
+<div style="grid-column: 12; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #A3A9B3">12</div>
+<div style="grid-column: 19; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #A3A9B3">19</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.35">
+<div style="display: flex; gap: 8px; color: #A3A9B3"><span aria-hidden="true" style="flex: none; width: 16px; height: 16px; margin-top: 1px; border-radius: 3px; background: #2F343D"></span>17 spots clash with swaps you've already found</div>
+<div style="display: flex; gap: 8px; color: #ECE8DF"><span aria-hidden="true" style="flex: none; width: 16px; height: 16px; margin-top: 1px; box-sizing: border-box; border-radius: 3px; border: 1.5px solid #ECE8DF; display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', monospace; font-size: 10px">=</span>Spot 12 puts W over W, and no letter can become itself</div>
+<div style="display: flex; gap: 8px; color: #F2B544"><span aria-hidden="true" style="flex: none; width: 16px; height: 16px; margin-top: 1px; border-radius: 3px; background: #F2B544"></span>Spot 19 is the only fit</div>
+</div>
+</section>
+
+<section aria-label="Swaps found" style="display: flex; flex-direction: column; gap: 8px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.08em; color: #A3A9B3">SWAPS · 3 OF 13 FOUND</div>
+<div style="display: flex; flex-wrap: wrap; gap: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 600">
+<div style="padding: 6px 10px; border-radius: 8px; background: #1D3550; color: #CFE5FF">M ⇄ U</div>
+<div style="padding: 6px 10px; border-radius: 8px; background: #1D3550; color: #CFE5FF">I ⇄ W</div>
+<div style="padding: 6px 10px; border-radius: 8px; background: #1D3550; color: #CFE5FF">L ⇄ V</div>
+<div style="padding: 5px 9px; border-radius: 8px; border: 1px dashed #F2B544; color: #F2B544">D ⇄ R</div>
+<div style="padding: 5px 9px; border-radius: 8px; border: 1px dashed #F2B544; color: #F2B544">A ⇄ G</div>
+<div style="padding: 5px 9px; border-radius: 8px; border: 1px dashed #F2B544; color: #F2B544">N ⇄ X</div>
+</div>
+</section>
+
+<section aria-label="Known words" style="display: flex; flex-direction: column; gap: 8px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.08em; color: #A3A9B3">WORDS IN THIS MESSAGE</div>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; font-family: 'IBM Plex Mono', monospace; font-size: 14px">
+<button style="min-height: 44px; border-radius: 10px; border: 1px solid #2D4F78; background: #1D3550; color: #CFE5FF; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>MILL</button>
+<button aria-pressed="true" style="min-height: 44px; border-radius: 10px; border: 2px solid #F2B544; background: #1B1E24; color: #F2B544; cursor: pointer">DAWN</button>
+<button style="min-height: 44px; border-radius: 10px; border: 1px solid #2F343D; background: #1B1E24; color: #ECE8DF; cursor: pointer">MEET</button>
+<button style="min-height: 44px; border-radius: 10px; border: 1px solid #2F343D; background: #1B1E24; color: #ECE8DF; cursor: pointer">THE</button>
+</div>
+</section>
+
+<nav aria-label="Actions" style="margin-top: auto; display: grid; grid-template-columns: 1fr 2fr; gap: 8px">
+<button style="height: 48px; border-radius: 12px; border: 1px solid #2F343D; background: #1B1E24; color: #ECE8DF; font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"></path><path d="M4 9h10a6 6 0 0 1 0 12h-3"></path></svg>Undo</button>
+<button style="height: 48px; border-radius: 12px; border: none; background: #F2B544; color: #121418; font-weight: 600; cursor: pointer">Lock DAWN at 19</button>
+</nav>
+
+</div>
+</body>
+</html>
