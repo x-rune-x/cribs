@@ -1,0 +1,5 @@
+# LF everywhere, so scripts and configs work unchanged in Linux containers and on the Pi.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.woff2 binary

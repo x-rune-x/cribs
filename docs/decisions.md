@@ -7,6 +7,11 @@ Changes to, and clarifications of, [the brief](brief.md), agreed during planning
 - **npm instead of pnpm.** One package, not a monorepo, so pnpm's advantages are small, and npm ships with Node. Pass script arguments after `--`: `npm run generate -- --count 30`.
 - **Nuxt 4 instead of Next.js.** Built with Nitro's `node-server` preset (`.output/server/index.mjs`), which runs as a plain Node server in a container, so the Pi and scaling plans are unchanged. API routes become Nitro routes such as `server/api/games/[id]/moves.post.ts`; Better Auth mounts at `server/api/auth/[...all].ts`.
 - **TypeScript 6, not 7.** Vue's type checker (`vue-tsc`) can't use TypeScript 7 yet because 7.0 has no JavaScript compiler API. Revisit once it does.
+- **npm 11.** npm 10 fails to install Nuxt with "Cannot read properties of null (reading 'edgesOut')", a resolver bug that npm 11 (the version Node 24 ships) doesn't have. npm 11 blocks dependency install scripts unless approved, so `package.json` lists `allowScripts` for better-sqlite3 and esbuild.
+- **Drizzle 0.45, the stable line.** Drizzle's docs now point at the 1.0 release candidate; move once 1.0 is stable.
+- **A client-rendered app (`ssr: false`).** Everything is interactive and the daily puzzle depends on the player's local date, so server rendering adds nothing. It also avoids forwarding Better Auth cookies during SSR. Nitro still serves the API.
+- **Line endings are LF** (`.gitattributes`), so scripts work unchanged in Linux containers.
+- **Better Auth's generated tables** (`npm run auth:schema`) use SQLite's `unixepoch()` for column defaults. Regenerate with `--dialect postgresql` when moving to Postgres.
 
 ## Rules
 
@@ -22,14 +27,17 @@ Changes to, and clarifications of, [the brief](brief.md), agreed during planning
 10. **The mockup's "Undo" becomes "Cancel"**: it clears the preview only, since every move counts.
 11. **Only the web server writes the database.** The seeder posts puzzle files to an admin-only endpoint on the running server (token in `.env.local`), and migrations run inside the web process at startup. The deploy script pulls the image, recreates `web` and waits for the health check.
 
-## Open questions
-
-These were raised without a recommendation and are still to be answered before their milestones:
-
-- Should the leaderboard show only signed-up players, or anonymous ones too? (Milestone 3)
-- Does a streak count consecutive daily wins (a loss resets it, as in Wordle) or consecutive days played? (Milestone 3)
-- Should past daily puzzles join the practice archive once their day has passed? (Milestone 2)
-- Which Raspberry Pi model, and is there a domain on Cloudflare yet? (Milestone 4)
+12. **Two difficulty tiers for now: Easy and Medium.** The engine still grades Hard (needs L3), but the generator only makes Easy and Medium, since Hard almost never occurs (see the findings below). Revisit after the friends test; the strongest candidate is a "read the last letters" tier.
+13. **Anonymous players appear on the leaderboard**, under a generated name until they pick one.
+14. **Streaks count consecutive daily wins.** A loss or a missed day resets the streak.
+15. **Past daily puzzles stay out of the practice archive** for now.
+16. **Hosting:** a Raspberry Pi 4, and no domain yet. The plan is to register one with Namecheap and point its nameservers at Cloudflare (free plan) so the Cloudflare Tunnel can use it. Until then, the fallback is Tailscale Funnel.
+17. **Pencil notes stay in the browser** (localStorage, per game). They're free, so the server never needs them.
+18. **Anonymous players get a generated name** such as "Masked Wolf 12", which the leaderboard will show until they choose one.
+19. **The API uses 0-based positions**, like the engine. The UI adds 1.
+20. **Rate limits are kept in memory:** 30 moves and 20 game starts per player per minute. That's enough for one server process; several instances would need a shared store.
+21. **Starting today's game starts its clock**, so the server measures time from the first visit. Time only breaks ties.
+22. **Practice games resume** where the player left off. After a practice game ends, "Play again" starts a fresh one; the ranked daily game can't be replayed.
 
 ## Generator findings (milestone 1)
 

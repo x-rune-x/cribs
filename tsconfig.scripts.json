@@ -1,0 +1,24 @@
+{
+  // The engine, CLI scripts, end-to-end tests and tool configs. Nuxt's own
+  // configs (in .nuxt/) cover app/, server/ and shared/.
+  "compilerOptions": {
+    "composite": true,
+    "target": "es2023",
+    "lib": ["es2023", "dom"],
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "resolveJsonModule": true,
+    "types": ["node"],
+    "paths": {
+      "#engine": ["./src/engine/index.ts"],
+      "#shared/*": ["./shared/*"]
+    }
+  },
+  "include": ["src", "scripts", "e2e", "shared", "vitest.config.ts", "playwright.config.ts"]
+}

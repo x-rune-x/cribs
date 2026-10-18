@@ -210,7 +210,7 @@ class PuzzleIndex {
 
   constructor(ciphertext: string, cribs: readonly string[]) {
     this.ct = Int8Array.from(ciphertext, code);
-    for (const c of this.ct) this.letterCount[c] += 1;
+    for (const c of this.ct) this.letterCount[c] = this.letterCount[c]! + 1;
     this.cribs = cribs;
     this.cribIndex = new Map(cribs.map((crib, i) => [crib, i]));
     this.lengths = cribs.map((crib) => crib.length);

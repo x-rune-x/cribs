@@ -2,13 +2,16 @@
 node_modules/
 .pnpm-store/
 
-# Next.js and build output
-.next/
+# Nuxt and build output
+.nuxt/
+.output/
+.nitro/
+.data/
+.cache/
 out/
 build/
 dist/
 *.tsbuildinfo
-next-env.d.ts
 
 # Environment variables (.env.example stays committed)
 .env

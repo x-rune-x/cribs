@@ -3,7 +3,7 @@
 // difficulty.
 
 import { type Key, applyKey, createRng, generateKey } from "./cipher";
-import { CRIB_COUNT, MESSAGE_LENGTH, MIN_CRIB_LENGTH } from "./config";
+import { CRIB_COUNT, GENERATED_DIFFICULTIES, MESSAGE_LENGTH, MIN_CRIB_LENGTH } from "./config";
 import { type Grade, grade } from "./grader";
 import { countSolutions } from "./solver";
 import type { Difficulty, PublicPuzzle, Solution } from "./state";
@@ -100,7 +100,7 @@ export interface AttemptReport {
 
 export interface GenerateOptions {
   readonly seed: string;
-  /** Acceptable difficulties, most wanted first. Defaults to any. */
+  /** Acceptable difficulties, most wanted first. Defaults to GENERATED_DIFFICULTIES. */
   readonly targets?: readonly Difficulty[];
   /** Attempts before giving up. Each attempt uses a new key and crib subset. */
   readonly attempts?: number;
@@ -122,7 +122,7 @@ export function generatePuzzle(message: Message, options: GenerateOptions): Gene
   const words = cribCandidates(message);
   const { min, max } = options.cribCount ?? CRIB_COUNT;
   if (words.length < min) return null;
-  const targets = options.targets ?? ["easy", "medium", "hard"];
+  const targets = options.targets ?? GENERATED_DIFFICULTIES;
   const attempts = options.attempts ?? 200;
   const stopEarly = options.stopEarly ?? true;
 

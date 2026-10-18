@@ -1,7 +1,7 @@
 // Generates puzzles from content/messages.txt.
 //
 //   npm run generate -- --count 30           write 30 puzzles to data/puzzles/<run>/
-//   npm run generate -- --difficulty hard    only Hard puzzles
+//   npm run generate -- --difficulty medium  only Medium puzzles
 //   npm run generate -- --survey             sample every message, print stats, write nothing
 //   npm run generate -- --check              check the messages file
 //
@@ -14,6 +14,7 @@ import {
   type AttemptReport,
   type Difficulty,
   ENGINE_VERSION,
+  GENERATED_DIFFICULTIES,
   GENERATOR_VERSION,
   type GeneratedPuzzle,
   type Message,
@@ -28,7 +29,7 @@ import {
 const HELP = `Usage: npm run generate -- [options]
 
   --count <n>          puzzles to generate (default 30)
-  --difficulty <d>     easy, medium, hard or mix (default mix: 40% easy, 40% medium, 20% hard)
+  --difficulty <d>     easy, medium or mix (default mix: half easy, half medium)
   --seed <text>        seed for a reproducible run (default: random)
   --attempts <n>       keys and crib subsets to try per message (default 300, survey 40)
   --min-cribs <n>      fewest cribs per puzzle (default 3)
@@ -40,8 +41,9 @@ const HELP = `Usage: npm run generate -- [options]
   --verbose            print each puzzle's message (spoilers)
 `;
 
-const DIFFICULTIES: readonly Difficulty[] = ["easy", "medium", "hard"];
-const MIX: Record<Difficulty, number> = { easy: 0.4, medium: 0.4, hard: 0.2 };
+type Tier = (typeof GENERATED_DIFFICULTIES)[number];
+const DIFFICULTIES: readonly Tier[] = GENERATED_DIFFICULTIES;
+const MIX: Record<Tier, number> = { easy: 0.5, medium: 0.5 };
 
 const { values: args } = parseArgs({
   options: {
@@ -97,7 +99,7 @@ async function main() {
   const count = positiveInt("count", args.count, 30);
   const attempts = positiveInt("attempts", args.attempts, 300);
   const mode = args.difficulty;
-  if (mode !== "mix" && !DIFFICULTIES.includes(mode as Difficulty)) throw new Error(`Unknown difficulty ${mode}`);
+  if (mode !== "mix" && !DIFFICULTIES.includes(mode as Tier)) throw new Error(`Unknown difficulty ${mode}`);
   if (count > usable.length) {
     console.warn(`Only ${usable.length} usable messages, and each is used once per run, so at most ${usable.length} puzzles.\n`);
   }
@@ -109,7 +111,7 @@ async function main() {
 
   for (const [i, message] of order.entries()) {
     if (kept.length >= count) break;
-    const targets = mode === "mix" ? mixTargets(got, count) : [mode as Difficulty];
+    const targets = mode === "mix" ? mixTargets(got, count) : [mode as Tier];
     const generated = generatePuzzle(message, { seed: `${seed}:${i}`, targets, attempts, cribCount, onAttempt: (r) => stats.add(r) });
     if (!generated) {
       console.log(`  skipped: no ${targets.join("/")} puzzle in ${attempts} attempts`);
@@ -137,8 +139,8 @@ async function main() {
 }
 
 /** Every difficulty, most behind its share of the mix first. */
-function mixTargets(got: Record<Difficulty, number>, count: number): Difficulty[] {
-  const deficit = (d: Difficulty) => MIX[d] * count - got[d];
+function mixTargets(got: Record<Difficulty, number>, count: number): Tier[] {
+  const deficit = (d: Tier) => MIX[d] * count - got[d];
   return [...DIFFICULTIES].sort((a, b) => deficit(b) - deficit(a));
 }
 

@@ -1,0 +1,342 @@
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import type { StartGameRequest } from "#shared/types/api";
+import { useGame } from "~/composables/useGame";
+import HowToPlay from "./HowToPlay.vue";
+
+const props = defineProps<{ request: StartGameRequest }>();
+
+const g = useGame();
+const help = ref<InstanceType<typeof HowToPlay> | null>(null);
+const { game, selected, pos, playing, feedback, busy } = g;
+
+onMounted(() => {
+  g.start(props.request);
+  window.addEventListener("keydown", onKey);
+});
+onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
+
+const kicker = computed(() => {
+  const p = game.value?.puzzle;
+  if (!p) return "";
+  const difficulty = p.difficulty[0]!.toUpperCase() + p.difficulty.slice(1);
+  return `${p.kind === "daily" ? "Daily" : "Practice"} · No. ${String(p.number).padStart(3, "0")} · ${difficulty} · Par ${p.par}`;
+});
+
+const mistakePips = computed(() => {
+  const view = game.value!;
+  return "●".repeat(view.mistakes) + "○".repeat(Math.max(0, view.maxMistakes - view.mistakes));
+});
+
+function playAgain() {
+  if (props.request.kind === "practice") g.start({ ...props.request, fresh: true });
+}
+
+/** Arrow keys slide the word, up and down change word, Enter locks, Escape cancels. */
+function onKey(event: KeyboardEvent) {
+  if (!playing.value || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+  const target = event.target as HTMLElement | null;
+  if (target?.closest("input, select, textarea, dialog")) return;
+  const ours = !target || target === document.body || !!target.closest("[data-game-keys]");
+  switch (event.key) {
+    case "ArrowLeft":
+    case "ArrowRight": {
+      const step = (event.key === "ArrowRight" ? 1 : -1) * (event.shiftKey ? 5 : 1);
+      if (selected.value) g.slide(step);
+      else g.cycle(1);
+      break;
+    }
+    case "ArrowUp":
+    case "ArrowDown":
+      g.cycle(event.key === "ArrowDown" ? 1 : -1);
+      break;
+    case "Home":
+      g.moveTo(0);
+      break;
+    case "End":
+      g.moveTo(g.spotCount.value - 1);
+      break;
+    case "Enter":
+      if (!ours || !selected.value) return;
+      g.lock();
+      break;
+    case "Escape":
+      if (!selected.value) return;
+      g.cancel();
+      break;
+    default:
+      return;
+  }
+  event.preventDefault();
+}
+</script>
+
+<template>
+  <div class="screen">
+    <header class="head">
+      <div class="intro">
+        <div class="kicker">{{ kicker || "&nbsp;" }}</div>
+        <h1>Crib</h1>
+        <p class="muted">Letters swap in pairs, and no letter ever becomes itself. Slide known words along the message to find the swaps.</p>
+      </div>
+      <button type="button" class="help-button" aria-label="How to play" @click="help?.open()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14" />
+          <path d="M12 17.5h.01" />
+        </svg>
+      </button>
+    </header>
+
+    <div v-if="g.loadError.value" class="panel notice" role="alert">
+      <template v-if="g.loadError.value.code === 'no-daily'">
+        <p>There's no puzzle for today yet.</p>
+        <NuxtLink to="/practice" class="btn">Try a practice puzzle</NuxtLink>
+      </template>
+      <template v-else>
+        <p>{{ g.loadError.value.message }}</p>
+        <button type="button" class="btn" @click="g.start(request)">Try again</button>
+      </template>
+    </div>
+    <p v-else-if="!game" class="muted" role="status">Intercepting the message…</p>
+
+    <template v-else>
+      <MessageGrid :cells="g.cells.value" :locked="game.locked" :trying="g.trying.value" />
+
+      <EndSummary v-if="game.finished" :game="game" @again="playAgain" />
+
+      <template v-else>
+        <CribSlider
+          v-if="selected"
+          :crib="selected"
+          :pos="pos"
+          :count="g.spotCount.value"
+          :scan="g.scan.value"
+          @move="g.moveTo"
+          @step="g.slide"
+        />
+
+        <SwapsPanel
+          :known="game.known"
+          :known-pairs="g.knownPairs.value"
+          :preview-pairs="g.previewPairs.value"
+          :pencil-pairs="g.pencilPairs.value"
+          :ciphertext="game.puzzle.ciphertext"
+          :playing="playing"
+          :busy="busy"
+          @declare="g.declare"
+          @pencil="g.setPencil"
+          @unpencil="g.clearPencil"
+        />
+
+        <CribList :cribs="game.puzzle.cribs" :locked="game.locked" :selected="selected" :disabled="busy" @select="g.select" />
+
+        <label v-if="game.mode !== 'ranked'" class="assist">
+          <input type="checkbox" :checked="g.assisted.value" :disabled="g.assisted.value" @change="g.enableAssist()" />
+          <span>
+            Assist mode
+            <small class="muted">Shows which spots are impossible. It stays on for this game.</small>
+          </span>
+        </label>
+
+        <!-- Kept on screen on phones, so the Lock button and each move's result stay visible. -->
+        <div class="dock">
+          <p class="status">
+            <span>Moves <strong class="mono">{{ game.moves }}</strong> · par {{ game.puzzle.par }}</span>
+            <span>
+              Mistakes <span class="pips mono" aria-hidden="true">{{ mistakePips }}</span>
+              <span class="visually-hidden">{{ game.mistakes }} of {{ game.maxMistakes }}</span>
+            </span>
+            <span>Hints <strong class="mono">{{ game.hints }}</strong></span>
+          </p>
+
+          <div class="feedback" role="status" aria-live="polite">
+            <div v-if="feedback" class="message" :class="feedback.tone">
+              <span class="icon" aria-hidden="true">{{ feedback.tone === "good" ? "✓" : feedback.tone === "bad" ? "✗" : "i" }}</span>
+              <p>{{ feedback.text }}</p>
+              <button v-if="feedback.hint" type="button" class="btn" :disabled="busy" @click="g.playHint(feedback.hint)">Play it</button>
+            </div>
+          </div>
+
+          <nav class="actions" aria-label="Actions">
+            <button v-if="selected" type="button" class="btn" @click="g.cancel">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+              Cancel
+            </button>
+            <button v-else type="button" class="btn" :disabled="busy" @click="g.askHint">Hint</button>
+            <button type="button" class="btn btn-primary" :disabled="!selected || busy" @click="g.lock">
+              {{ selected ? `Lock ${selected} at ${pos + 1}` : "Pick a word to place" }}
+            </button>
+          </nav>
+        </div>
+      </template>
+    </template>
+
+    <HowToPlay ref="help" />
+  </div>
+</template>
+
+<style scoped>
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.intro {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+h1 {
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.intro p {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.help-button {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 22px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.notice {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.assist {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 14px;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.assist input {
+  width: 20px;
+  height: 20px;
+  margin: 2px 0 0;
+  accent-color: var(--amber);
+}
+
+.assist small {
+  display: block;
+  font-size: 12px;
+}
+
+.status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.status strong {
+  color: var(--text);
+}
+
+.pips {
+  color: var(--amber);
+  letter-spacing: 2px;
+}
+
+.feedback:empty {
+  display: none;
+}
+
+.message {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.message p {
+  flex: 1;
+}
+
+.message.good {
+  border-color: var(--locked-border);
+}
+
+.message.bad {
+  border-color: var(--amber);
+}
+
+.icon {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--raised);
+}
+
+.message.good .icon {
+  background: var(--locked-fill);
+  color: var(--locked-text);
+}
+
+.message.bad .icon {
+  background: var(--amber-tint);
+  color: var(--amber);
+}
+
+.dock {
+  position: sticky;
+  bottom: 0;
+  margin-top: auto;
+  padding: 10px 0 calc(8px + env(safe-area-inset-bottom));
+  background: linear-gradient(to bottom, transparent, var(--bg) 10px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 8px;
+}
+
+.actions .btn {
+  min-height: 48px;
+}
+</style>

@@ -12,4 +12,11 @@ export const MESSAGE_LENGTH = { min: 18, max: 40 } as const;
 
 export const CRIB_COUNT = { min: 3, max: 6 } as const;
 
+/**
+ * The tiers the generator makes. The grader can still rate a puzzle Hard (it
+ * needs L3), but at these message sizes that almost never happens, so for now
+ * there are two tiers.
+ */
+export const GENERATED_DIFFICULTIES = ["easy", "medium"] as const;
+
 export const MIN_CRIB_LENGTH = 3;
