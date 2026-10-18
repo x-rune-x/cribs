@@ -10,6 +10,8 @@ const props = defineProps<{
   ciphertext: string;
   playing: boolean;
   busy: boolean;
+  /** Blind mode: declared swaps stay unchecked until the player submits. */
+  blind?: boolean;
 }>();
 
 const emit = defineEmits<{ declare: [a: Letter, b: Letter]; pencil: [a: Letter, b: Letter]; unpencil: [letter: Letter] }>();
@@ -75,7 +77,12 @@ function openForm() {
           </label>
         </div>
         <p class="note muted">
-          {{ problem ?? "Pencil notes are free. A declared swap counts as a move, and a wrong one is a mistake." }}
+          {{
+            problem ??
+            (blind
+              ? "Pencil notes are free. Declared swaps go on the board unchecked until you submit."
+              : "Pencil notes are free. A declared swap counts as a move, and a wrong one is a mistake.")
+          }}
         </p>
         <div class="buttons">
           <button type="button" class="btn" :disabled="first === second" @click="emit('pencil', first, second)">Pencil in</button>

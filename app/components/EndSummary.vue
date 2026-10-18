@@ -28,7 +28,7 @@ const versusPar = computed(() => {
         <dt>Score</dt>
         <dd class="score">{{ finished.score }}</dd>
       </div>
-      <div>
+      <div v-if="game.puzzle.variant.feedback !== 'blind'">
         <dt>Moves</dt>
         <dd>{{ game.moves }} <small>{{ versusPar }}</small></dd>
       </div>
@@ -52,7 +52,9 @@ const versusPar = computed(() => {
       <NuxtLink v-if="game.mode === 'ranked'" to="/practice" class="btn btn-primary">Practice puzzles</NuxtLink>
       <template v-else>
         <button type="button" class="btn btn-primary" @click="emit('again')">Play again</button>
-        <NuxtLink to="/practice" class="btn">All practice puzzles</NuxtLink>
+        <NuxtLink :to="game.puzzle.kind === 'lab' ? '/lab' : '/practice'" class="btn">
+          {{ game.puzzle.kind === "lab" ? "All Lab puzzles" : "All practice puzzles" }}
+        </NuxtLink>
       </template>
     </div>
   </section>

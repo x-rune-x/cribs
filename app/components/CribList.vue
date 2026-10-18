@@ -6,25 +6,35 @@ const props = defineProps<{
   locked: readonly Placement[];
   selected: string | null;
   disabled: boolean;
+  /** Blind mode: cribs the player has placed (unchecked). They can still be picked up and moved. */
+  placed?: readonly string[];
+  /** One of the words isn't in the message. */
+  decoy?: boolean;
 }>();
 
 const emit = defineEmits<{ select: [crib: string] }>();
 
 const lockedAt = (crib: string) => props.locked.find((p) => p.crib === crib);
+const isPlaced = (crib: string) => props.placed?.includes(crib) ?? false;
+const label = (crib: string) => {
+  const locked = lockedAt(crib);
+  if (locked) return `${crib}, locked at ${locked.pos + 1}`;
+  return isPlaced(crib) ? `${crib}, placed` : undefined;
+};
 </script>
 
 <template>
   <section class="words" aria-labelledby="words-title">
-    <h2 id="words-title" class="kicker">Words in this message</h2>
+    <h2 id="words-title" class="kicker">{{ decoy ? "Words: one isn't in the message" : "Words in this message" }}</h2>
     <div class="grid">
       <button
         v-for="crib in cribs"
         :key="crib"
         type="button"
         class="word mono"
-        :class="{ locked: lockedAt(crib), active: selected === crib }"
+        :class="{ locked: lockedAt(crib), placed: isPlaced(crib), active: selected === crib }"
         :aria-pressed="selected === crib"
-        :aria-label="lockedAt(crib) ? `${crib}, locked at ${lockedAt(crib)!.pos + 1}` : undefined"
+        :aria-label="label(crib)"
         :disabled="!!lockedAt(crib) || disabled"
         data-game-keys
         @click="emit('select', crib)"
@@ -68,6 +78,11 @@ const lockedAt = (crib: string) => props.locked.find((p) => p.crib === crib);
 .word.active {
   border: 2px solid var(--amber);
   color: var(--amber);
+}
+
+.word.placed {
+  border-style: dashed;
+  border-color: var(--muted);
 }
 
 .word.locked {

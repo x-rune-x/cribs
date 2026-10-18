@@ -3,6 +3,7 @@
     <nav class="top" aria-label="Main">
       <NuxtLink to="/" class="link">Today</NuxtLink>
       <NuxtLink to="/practice" class="link">Practice</NuxtLink>
+      <NuxtLink to="/lab" class="link">Lab</NuxtLink>
     </nav>
     <NuxtPage />
   </div>

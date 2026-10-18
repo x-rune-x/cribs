@@ -1,40 +1,13 @@
-import { type Page, expect, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { formatKey } from "../src/engine";
-import { GOLDEN_KEY, GOLDEN_TEXT, goldenPuzzle, goldenSolution } from "../src/engine/fixtures/golden";
+import { GOLDEN_KEY, GOLDEN_TEXT, goldenSolution } from "../src/engine/fixtures/golden";
 import { localDateString } from "../shared/dates";
-import { E2E_ADMIN_TOKEN } from "./env";
+import { golden, importPuzzles, placeWithKeyboard as lockWithKeyboard } from "./helpers";
 
 test.beforeAll(async ({ request }) => {
   // The golden puzzle as today's daily. Re-importing is a no-op, so every project can do this.
-  const response = await request.post("/api/admin/puzzles", {
-    headers: { authorization: `Bearer ${E2E_ADMIN_TOKEN}` },
-    data: {
-      puzzles: [{ id: "golden", ...goldenPuzzle, length: goldenPuzzle.ciphertext.length }],
-      solutions: [
-        {
-          id: "golden",
-          text: GOLDEN_TEXT,
-          plaintext: goldenSolution.plaintext,
-          positions: goldenSolution.positions,
-          key: formatKey(GOLDEN_KEY),
-          seed: "golden",
-        },
-      ],
-      daily: { count: 1, from: localDateString() },
-    },
-  });
-  expect(response.ok()).toBe(true);
+  await importPuzzles(request, { ...golden("golden"), daily: { count: 1, from: localDateString() } });
 });
-
-/** Picks a word, slides it to a 1-based spot with the arrow keys and locks it with Enter. */
-async function lockWithKeyboard(page: Page, crib: string, spot: number) {
-  await page.getByRole("button", { name: crib, exact: true }).click();
-  const start = Number(await page.getByRole("slider", { name: `Position of ${crib}` }).getAttribute("aria-valuenow"));
-  const key = spot > start ? "ArrowRight" : "ArrowLeft";
-  for (let i = 0; i < Math.abs(spot - start); i++) await page.keyboard.press(key);
-  await expect(page.getByRole("button", { name: `Lock ${crib} at ${spot}` })).toBeVisible();
-  await page.keyboard.press("Enter");
-}
 
 test("plays the golden puzzle to a win", async ({ page }) => {
   await page.goto("/");

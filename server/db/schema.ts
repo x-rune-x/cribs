@@ -5,7 +5,7 @@
 
 import { sql } from "drizzle-orm";
 import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
-import type { Difficulty, GameStatus, Move, Placement, SwapMap } from "#engine";
+import type { Difficulty, GameStatus, Move, Placement, SwapMap, Variant } from "#engine";
 import { user } from "./auth-schema";
 
 export * from "./auth-schema";
@@ -21,12 +21,16 @@ export const puzzles = sqliteTable(
     number: integer("number").notNull().unique(),
     /** The local date a daily puzzle is for; null for practice puzzles. */
     publishDate: text("publish_date").unique(),
-    kind: text("kind", { enum: ["daily", "practice"] }).notNull(),
+    kind: text("kind", { enum: ["daily", "practice", "lab"] }).notNull(),
     ciphertext: text("ciphertext").notNull(),
     cribs: text("cribs", { mode: "json" }).$type<string[]>().notNull(),
     difficulty: text("difficulty", { enum: ["easy", "medium", "hard"] }).$type<Difficulty>().notNull(),
     par: integer("par").notNull(),
     length: integer("length").notNull(),
+    /** Lab rules; null for standard puzzles. */
+    variant: text("variant", { mode: "json" }).$type<Variant>(),
+    /** The Lab variant's name, e.g. "Blind, decoy". */
+    label: text("label"),
     createdAt: integer("created_at").notNull(),
   },
   (t) => [index("puzzles_kind_idx").on(t.kind)],
@@ -89,7 +93,7 @@ export const moves = sqliteTable(
       .notNull()
       .references(() => games.id, { onDelete: "cascade" }),
     seq: integer("seq").notNull(),
-    kind: text("kind", { enum: ["lock", "swap", "hint"] }).notNull(),
+    kind: text("kind", { enum: ["lock", "swap", "hint", "submit"] }).notNull(),
     payload: text("payload", { mode: "json" }).$type<Move>().notNull(),
     /** Null for hints. */
     correct: integer("correct", { mode: "boolean" }),

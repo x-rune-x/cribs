@@ -1,6 +1,6 @@
-import { applyKey, countSolutions, covers, grade, parseKey } from "#engine";
+import { STANDARD_VARIANT, parseKey, verifyPuzzle } from "#engine";
 import { addDays, daysBetween, isDateString, utcDateString } from "#shared/dates";
-import type { ImportRequest, ImportSummary, PracticeItem, PuzzleView, SolutionFileEntry, PuzzleFileEntry } from "#shared/types/api";
+import type { ImportRequest, ImportSummary, PracticeItem, PuzzleFileEntry, PuzzleView, SolutionFileEntry } from "#shared/types/api";
 import {
   type Db,
   type PuzzleRow,
@@ -9,7 +9,7 @@ import {
   inTransaction,
   insertPuzzle,
   latestGamesByPuzzle,
-  listPracticePuzzles,
+  listPuzzlesOfKind,
   maxPuzzleNumber,
   puzzleIdsIn,
 } from "../db/queries";
@@ -25,6 +25,8 @@ export function toPuzzleView(row: PuzzleRow): PuzzleView {
     cribs: row.cribs,
     difficulty: row.difficulty,
     par: row.par,
+    variant: row.variant ?? STANDARD_VARIANT,
+    label: row.label,
   };
 }
 
@@ -42,11 +44,14 @@ export function dailyPuzzleFor(db: Db, localDate: unknown, now: number): PuzzleR
   return puzzle;
 }
 
-export function listPractice(db: Db, userId: string): PracticeItem[] {
+/** Practice or Lab puzzles, with the player's progress on each. */
+export function listPuzzles(db: Db, userId: string, kind: "practice" | "lab"): PracticeItem[] {
   const latest = latestGamesByPuzzle(db, userId);
-  return listPracticePuzzles(db).map((p) => ({
+  return listPuzzlesOfKind(db, kind).map((p) => ({
     id: p.id,
     number: p.number,
+    label: p.label,
+    variant: p.variant ?? STANDARD_VARIANT,
     difficulty: p.difficulty,
     par: p.par,
     length: p.length,
@@ -64,6 +69,7 @@ export function importPuzzles(db: Db, request: ImportRequest, now: number): Impo
     if (problem) throw badRequest("bad-import", `${puzzle.id}: ${problem}`);
     return { puzzle, solution };
   });
+  if (request.lab && request.daily) throw badRequest("bad-import", "Lab puzzles can't be daily puzzles");
   if (request.daily && (!isDateString(request.daily.from) || !Number.isInteger(request.daily.count) || request.daily.count < 0)) {
     throw badRequest("bad-import", "daily needs a count and a YYYY-MM-DD start date");
   }
@@ -82,12 +88,14 @@ export function importPuzzles(db: Db, request: ImportRequest, now: number): Impo
           id: puzzle.id,
           number: ++number,
           publishDate: date,
-          kind: date ? "daily" : "practice",
+          kind: request.lab ? "lab" : date ? "daily" : "practice",
           ciphertext: puzzle.ciphertext,
           cribs: puzzle.cribs,
           difficulty: puzzle.difficulty,
           par: puzzle.par,
           length: puzzle.ciphertext.length,
+          variant: puzzle.variant ?? null,
+          label: puzzle.label ?? null,
           createdAt: now,
         },
         {
@@ -126,17 +134,9 @@ function checkPuzzle(puzzle: PuzzleFileEntry, solution: SolutionFileEntry): stri
   } catch {
     return "the key doesn't parse";
   }
-  if (applyKey(key, solution.plaintext) !== puzzle.ciphertext) return "the key doesn't encrypt the plaintext to the ciphertext";
-  if (solution.text.replace(/ /g, "") !== solution.plaintext) return "the text doesn't match the plaintext";
-  if ([...puzzle.cribs].sort().join() !== puzzle.cribs.join()) return "the cribs aren't in alphabetical order";
-  for (const crib of puzzle.cribs) {
-    const pos = solution.positions[crib];
-    if (pos === undefined || solution.plaintext.slice(pos, pos + crib.length) !== crib) return `${crib} isn't at its stated position`;
-  }
-  const board = { ciphertext: puzzle.ciphertext, cribs: puzzle.cribs };
-  if (countSolutions(board, 2) !== 1) return "it doesn't have exactly one solution";
-  if (!covers(puzzle.ciphertext, solution.plaintext, puzzle.cribs)) return "the cribs don't reveal every letter";
-  const graded = grade(board);
-  if (!graded || graded.difficulty !== puzzle.difficulty || graded.par !== puzzle.par) return "its difficulty or par doesn't match the engine";
-  return null;
+  return verifyPuzzle(
+    { ciphertext: puzzle.ciphertext, cribs: puzzle.cribs, difficulty: puzzle.difficulty, par: puzzle.par, variant: puzzle.variant },
+    { plaintext: solution.plaintext, positions: solution.positions, key },
+    solution.text,
+  );
 }

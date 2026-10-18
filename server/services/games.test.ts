@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { addDays, utcDateString } from "#shared/dates";
-import type { Move } from "#engine";
+import { type Move, STANDARD_VARIANT } from "#engine";
 import { games } from "../db/schema";
-import { addUser, goldenImport, testDatabase } from "../testing";
+import { addUser, goldenImport, goldenLabImport, testDatabase } from "../testing";
+import { GOLDEN_KEY } from "../../src/engine/fixtures/golden";
+import { pairsOf } from "#engine";
+
+const GOLDEN_KEY_PAIRS = pairsOf(GOLDEN_KEY);
 import { ServiceError } from "./errors";
 import { enableAssist, getGame, playMove, startDailyGame, startPracticeGame } from "./games";
-import { dailyPuzzleFor, importPuzzles, listPractice } from "./puzzles";
+import { dailyPuzzleFor, importPuzzles, listPuzzles } from "./puzzles";
 
 const NOW = Date.parse("2026-10-18T12:00:00Z");
 const TODAY = utcDateString(NOW);
@@ -182,11 +186,11 @@ describe("practice games", () => {
   });
 
   it("lists practice puzzles with the player's progress", () => {
-    expect(listPractice(db, alice)).toEqual([
-      { id: "practice-1", number: 1, difficulty: "easy", par: 3, length: 22, status: null },
+    expect(listPuzzles(db, alice, "practice")).toEqual([
+      { id: "practice-1", number: 1, label: null, variant: STANDARD_VARIANT, difficulty: "easy", par: 3, length: 22, status: null },
     ]);
     startPracticeGame(db, alice, "practice-1", { localDate: TODAY }, NOW);
-    expect(listPractice(db, alice)[0]?.status).toBe("playing");
+    expect(listPuzzles(db, alice, "practice")[0]?.status).toBe("playing");
   });
 
   it("resumes the latest game, and starts a fresh one only when asked after it ends", () => {
@@ -208,5 +212,47 @@ describe("practice games", () => {
   it("won't start a daily puzzle as practice", () => {
     importPuzzles(db, goldenImport("daily-1", { count: 1, from: TODAY }), NOW);
     expectServiceError(() => startPracticeGame(db, alice, "daily-1", { localDate: TODAY }, NOW), 404, "not-found");
+  });
+});
+
+describe("lab games", () => {
+  const blind = { ...STANDARD_VARIANT, feedback: "blind" as const };
+  const free = { ...STANDARD_VARIANT, words: "free" as const };
+  const answer = () =>
+    Object.fromEntries([...GOLDEN_KEY_PAIRS].flatMap(([a, b]) => [[a, b], [b, a]]));
+
+  it("imports Lab puzzles separately from practice", () => {
+    importPuzzles(db, goldenLabImport("lab-blind", blind, "Blind"), NOW);
+    expect(listPuzzles(db, alice, "lab")).toMatchObject([{ id: "lab-blind", label: "Blind", variant: blind }]);
+    expect(listPuzzles(db, alice, "practice")).toEqual([]);
+  });
+
+  it("rejects a Lab puzzle whose par doesn't match its rules", () => {
+    const bad = goldenLabImport("lab-bad", blind);
+    bad.puzzles[0]!.par = 3;
+    expectServiceError(() => importPuzzles(db, bad, NOW), 400, "bad-import");
+  });
+
+  it("plays blind: no locks on the server, a wrong submission is a mistake, a right one wins", () => {
+    importPuzzles(db, goldenLabImport("lab-blind", blind), NOW);
+    const { id } = startPracticeGame(db, alice, "lab-blind", { localDate: TODAY }, NOW);
+    expectServiceError(() => playMove(db, alice, id, lock("MILL", 12), NOW), 400, "tentative-only");
+    const wrong = { ...answer(), U: "N", N: "U", X: "M", M: "X" };
+    expect(playMove(db, alice, id, { kind: "submit", mapping: wrong }, NOW).result).toEqual({
+      kind: "submit",
+      correct: false,
+      status: "playing",
+    });
+    const { result, game } = playMove(db, alice, id, { kind: "submit", mapping: answer() }, NOW + 5000);
+    expect(result).toMatchObject({ kind: "submit", correct: true, status: "won" });
+    expect(game.finished).toMatchObject({ text: "MEET AT THE OLD MILL AT DAWN", score: 85, durationMs: 5000 });
+  });
+
+  it("plays with the player's own words", () => {
+    importPuzzles(db, goldenLabImport("lab-free", free), NOW);
+    const { id, puzzle } = startPracticeGame(db, alice, "lab-free", { localDate: TODAY }, NOW);
+    expect(puzzle.cribs).toEqual([]);
+    expect(playMove(db, alice, id, lock("THEOLD", 6), NOW).result).toMatchObject({ kind: "lock", correct: true });
+    expect(playMove(db, alice, id, lock("MOLE", 12), NOW).game.mistakes).toBe(1);
   });
 });

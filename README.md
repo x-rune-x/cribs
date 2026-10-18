@@ -8,6 +8,7 @@ The spec is [docs/brief.md](docs/brief.md); decisions made since are in [docs/de
 
 - Milestone 1, the engine and generator: done.
 - Milestone 2, the playable game for anonymous players: done.
+- The Lab, trial rule variants for a harder mode: in playtesting. See [docs/decisions.md](docs/decisions.md#the-lab-trial-variants-for-a-harder-mode).
 - Milestone 3, accounts, the leaderboard, streaks and share text: next.
 
 ## Getting started
@@ -26,6 +27,8 @@ The dev server creates `data/crib.db` and runs migrations on startup. With it ru
 npm run generate -- --count 30 --seed demo
 npm run seed -- data/puzzles/run-demo --daily 14    # 14 daily puzzles from today; the rest go to practice
 npm run seed -- --golden                            # optional: the golden test puzzle as today's daily
+npm run generate -- --lab --seed lab                # Lab puzzles for every variant
+npm run seed -- data/puzzles/run-lab-lab --lab
 ```
 
 Seeding goes through the running server (`POST /api/admin/puzzles`), so only the server ever writes to the database.
@@ -68,7 +71,7 @@ server/
 shared/       types and date helpers used by both app and server (alias #shared)
 scripts/      generate and seed
 e2e/          Playwright tests
-content/      starter messages
+content/      starter messages, and grammar-light Lab messages
 data/         generated puzzles and the database (gitignored)
 ```
 

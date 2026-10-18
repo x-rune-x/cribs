@@ -3,6 +3,7 @@
 //
 //   npm run seed -- data/puzzles/run-<seed> --daily 20     first 20 new puzzles daily from today, the rest practice
 //   npm run seed -- data/puzzles/run-<seed> --from 2026-11-01 --daily 60
+//   npm run seed -- data/puzzles/run-<seed>-lab --lab      Lab puzzles from `npm run generate -- --lab`
 //   npm run seed -- --golden                               the golden test puzzle as today's daily
 //
 // Reads ADMIN_TOKEN and CRIB_URL from the environment or .env.local.
@@ -28,6 +29,7 @@ const { values: args, positionals } = parseArgs({
     from: { type: "string" },
     url: { type: "string" },
     golden: { type: "boolean", default: false },
+    lab: { type: "boolean", default: false },
     help: { type: "boolean", short: "h", default: false },
   },
 });
@@ -38,6 +40,7 @@ const HELP = `Usage: npm run seed -- <run directory> [--daily <n>] [--from YYYY-
   --daily <n>    make the first n new puzzles daily, on free dates from --from (default 0: all practice)
   --from <date>  first daily date (default: today, local time)
   --url <url>    the running server (default CRIB_URL or http://localhost:3000)
+  --lab          import as Lab puzzles (from npm run generate -- --lab)
   --golden       import the golden test puzzle as today's daily
 `;
 
@@ -51,7 +54,10 @@ async function main() {
   const count = Number(args.daily);
   if (!Number.isInteger(count) || count < 0) throw new Error("--daily must be a whole number");
 
-  const request: ImportRequest = args.golden ? goldenRequest(from) : await runRequest(positionals[0]!, { count, from });
+  const request: ImportRequest = args.golden
+    ? goldenRequest(from)
+    : await runRequest(positionals[0]!, args.lab ? undefined : { count, from });
+  if (args.lab) request.lab = true;
   const response = await fetch(new URL("/api/admin/puzzles", url), {
     method: "POST",
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
@@ -60,14 +66,15 @@ async function main() {
   if (!response.ok) throw new Error(`Import failed: ${response.status} ${(await response.text()).slice(0, 500)}`);
   const summary = (await response.json()) as ImportSummary;
 
-  console.log(`Added ${summary.added} puzzles: ${summary.dailyDates.length} daily, ${summary.practice} practice.`);
+  const rest = args.lab ? "Lab" : "practice";
+  console.log(`Added ${summary.added} puzzles: ${summary.dailyDates.length} daily, ${summary.practice} ${rest}.`);
   if (summary.dailyDates.length > 0) {
     console.log(`Daily dates: ${summary.dailyDates[0]} to ${summary.dailyDates.at(-1)}`);
   }
   if (summary.skipped.length > 0) console.log(`Skipped ${summary.skipped.length} already imported.`);
 }
 
-async function runRequest(dir: string, daily: { count: number; from: string }): Promise<ImportRequest> {
+async function runRequest(dir: string, daily: { count: number; from: string } | undefined): Promise<ImportRequest> {
   const read = async <T>(file: string) => JSON.parse(await readFile(path.join(dir, file), "utf8")) as T;
   return {
     puzzles: await read<PuzzleFileEntry[]>("puzzles.json"),

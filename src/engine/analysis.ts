@@ -135,6 +135,7 @@ function explainMistake(state: GameState, move: Move, level: Level): string {
       ? `${move.a}⇄${move.b} was ruled out: ${describeSwapReason(reason, "past")}.`
       : `${move.a} and ${move.b} don't swap, though nothing you knew ruled it out yet.`;
   }
+  if (move.kind === "submit") return "The submitted decryption wasn't right.";
   return "";
 }
 

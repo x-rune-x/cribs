@@ -51,12 +51,31 @@ From `npm run generate -- --survey` over the 60 starter messages (20–31 letter
 - **L3 is almost never needed.** Across about 19,000 unique puzzles (with and without coverage), L3 was needed to place the cribs only 4 times, and never in a puzzle that covers the message. Cribs constrain each other in pairs, and L2 already checks every pair, which is close to complete for 2–6 cribs.
 - **What separates Easy from Medium:** every Easy puzzle has an L1-forced first move, and 98% of Medium puzzles have none. Medium means "one L2 insight to get started" (96% need exactly one L2 move).
 
-So, as defined, Hard puzzles essentially don't occur at these sizes. How to define a third tier is an open decision.
+So, as defined, Hard puzzles essentially don't occur at these sizes. For now there are two tiers (decision 12); the Lab below is exploring what a harder mode should be.
 
-## Design notes for harder tiers
+## The Lab: trial variants for a harder mode
 
-From the first playtest: the cribs come from one sensible English sentence, so their order can often be guessed by arranging them into a sentence, which skips some of the deduction. That's fine for Easy. Ideas to weigh when designing harder tiers:
+From the first playtest: the cribs come from one sensible English sentence, so their order can often be guessed by arranging them into a sentence, which skips some of the deduction. That's fine for Easy. To find a harder mode, the Lab (`/lab`, unranked) offers rule variants that combine freely. A puzzle's variant is stored with it (`puzzles.variant`):
 
-- **Fewer cribs than words**, so the cribs don't sketch the whole sentence. This needs the coverage rule relaxed, which fits the "read the last letters" tier.
-- **Messages with little grammar to lean on**, such as call signs, lists or coordinates ("RED FOX SILVER OWL TWO NINE").
-- **A decoy crib** that isn't in the message, so the player has to prove which words fit. This changes the brief's rule that every crib is in the plaintext.
+- **Few words** (`coverage: "partial"`): 2–3 cribs that leave 1–3 swaps to read from the decrypted text and declare. Par adds one move per swap to read.
+- **Decoy** (`decoy: true`): one listed word isn't in the message. Cribbot reasons with the rule "exactly one word is absent", and uniqueness counts that way too.
+- **Your own words** (`words: "free"`): no list. A typed word counts as correct if those letters really are there, even across a word boundary, and overlapping true words are allowed. Par is the fewest words plus swaps that decrypt everything. A hint reveals one word.
+- **Blind** (`feedback: "blind"`): placements and declared swaps stay on the player's device, can be moved or removed freely, and show clashes between themselves, but never whether they're right. The server only checks a submitted decryption: a wrong one is a mistake with no detail. A hint confirms one move on the board. There's no par; the score is 100 minus mistakes and hints.
+- **Lists**: grammar-light messages in `content/lab-messages.txt`, so word order gives little away.
+
+Make Lab puzzles with `npm run generate -- --lab` and import them with `npm run seed -- <run> --lab`.
+
+**Findings** (every variant across all 80 messages):
+
+| Variant | Easy | Medium | Hard | Mean par |
+| --- | --- | --- | --- | --- |
+| Few words | 36 | 24 | 0 | 4.7 |
+| Lists, few words | 12 | 8 | 0 | 5.3 |
+| Decoy | 0 | 31 | 29 | 3.3 |
+| Few words, decoy | 0 | 23 | 37 | 4.6 |
+
+Your-own-words par is 2–5, mean 3.6.
+
+- **A decoy is what finally produces logic-Hard puzzles.** Any word might be the absent one, and L2 only compares words in pairs, so it can't rule anything out. When the decoy fits somewhere, only L3 trial and error ("if THE were the decoy, everything else would have to fit… and it can't") exposes it.
+- **When the decoy fits nowhere at all,** L2 spots it and the puzzle is Medium.
+- **The golden puzzle with OAK as a decoy** is Hard with par 3.

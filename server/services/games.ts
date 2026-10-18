@@ -49,7 +49,7 @@ export function startDailyGame(db: Db, userId: string, localDate: unknown, now: 
   return toGameView(db, findGame(db, game.id)!, puzzle);
 }
 
-/** Resumes the player's latest game on a practice puzzle, or starts one (always, with `fresh`). */
+/** Resumes the player's latest game on a practice or Lab puzzle, or starts one (always, with `fresh`). */
 export function startPracticeGame(
   db: Db,
   userId: string,
@@ -60,7 +60,7 @@ export function startPracticeGame(
   if (typeof puzzleId !== "string") throw badRequest("bad-puzzle", "Send a puzzle id");
   if (!isDateString(options.localDate)) throw badRequest("bad-date", "Send the local date as YYYY-MM-DD");
   const puzzle = findPuzzle(db, puzzleId);
-  if (!puzzle || puzzle.kind !== "practice") throw notFound("Practice puzzle");
+  if (!puzzle || puzzle.kind === "daily") throw notFound("Practice puzzle");
   const latest = findLatestGame(db, userId, puzzle.id);
   if (latest && (latest.status === "playing" || !options.fresh)) return toGameView(db, latest, puzzle);
   const game = newGameRow(userId, puzzle.id, "practice", options.localDate, now);
@@ -96,7 +96,7 @@ export function playMove(db: Db, userId: string, gameId: string, input: unknown,
       kind: move.kind,
       payload: move,
       correct: result.kind === "hint" ? null : result.correct,
-      reason: result.kind === "hint" ? { hint: result.hint } : result.correct ? null : { reasons: result.reasons },
+      reason: reasonOf(result),
       createdAt: now,
     });
     const finished = next.status !== "playing";
@@ -152,14 +152,30 @@ function parseMove(input: unknown): Move {
       return { kind: "swap", a: body.a.toUpperCase(), b: body.b.toUpperCase() } as Move;
     case "hint":
       return { kind: "hint" };
+    case "submit":
+      if (typeof body.mapping !== "object" || body.mapping === null) throw badRequest("bad-move", "A submission needs a mapping");
+      return { kind: "submit", mapping: body.mapping as Record<string, string> } as Move;
     default:
       throw badRequest("bad-move", "Unknown move");
   }
 }
 
+/** What to record about a move's result: the hint, or why a mistake was impossible. */
+function reasonOf(result: MoveResult): unknown {
+  if (result.kind === "hint") return { hint: result.hint };
+  if (result.kind === "submit" || result.correct) return null;
+  return { reasons: result.reasons };
+}
+
 function toEngineState(game: GameRow, puzzle: PuzzleRow): GameState {
   return {
-    puzzle: { ciphertext: puzzle.ciphertext, cribs: puzzle.cribs, difficulty: puzzle.difficulty, par: puzzle.par },
+    puzzle: {
+      ciphertext: puzzle.ciphertext,
+      cribs: puzzle.cribs,
+      difficulty: puzzle.difficulty,
+      par: puzzle.par,
+      ...(puzzle.variant ? { variant: puzzle.variant } : {}),
+    },
     known: game.board.known,
     locked: game.board.locked,
     moves: game.moveCount,
@@ -170,7 +186,7 @@ function toEngineState(game: GameRow, puzzle: PuzzleRow): GameState {
 }
 
 function toEngineSolution(row: SolutionRow): Solution {
-  return { plaintext: row.plaintext, positions: row.positions, key: parseKey(row.key) };
+  return { plaintext: row.plaintext, positions: row.positions, key: parseKey(row.key), text: row.text };
 }
 
 function toLogEntry(row: MoveRow): MoveLogEntry {

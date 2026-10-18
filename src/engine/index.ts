@@ -12,3 +12,4 @@ export * from "./rules";
 export * from "./scoring";
 export * from "./solver";
 export * from "./state";
+export * from "./variants";

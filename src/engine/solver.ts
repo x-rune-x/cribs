@@ -10,17 +10,22 @@
 // Every level is sound: it never removes a true position, so every forced move it
 // finds is correct.
 //
+// With a decoy (Lab variant), exactly one crib isn't in the message, so each crib
+// may also be "absent". With partial coverage, the goal is to place every real crib
+// rather than to decrypt every letter.
+//
 // Internally letters are 0–25 and swap maps are Int8Arrays with -1 for "unknown".
 
 import { ALPHABET, type Letter, type Pair, type SwapMap, LETTERS, pair } from "./cipher";
 import { type Placement, type PlacementReason, checkPlacement } from "./rules";
 import type { Difficulty, Move } from "./state";
+import { type Variant, variantOf } from "./variants";
 
 export type Level = 1 | 2 | 3;
 
 /** The public parts of a game the solver reasons from. GameState satisfies it. */
 export interface Board {
-  readonly puzzle: { readonly ciphertext: string; readonly cribs: readonly string[] };
+  readonly puzzle: { readonly ciphertext: string; readonly cribs: readonly string[]; readonly variant?: Variant };
   readonly known: SwapMap;
   readonly locked: readonly Placement[];
 }
@@ -65,7 +70,7 @@ export function candidates(board: Board, level: Level): Map<string, number[]> {
   const result = level === 1 ? { ok: true as const, doms: base } : propagateTo(index, base, level);
   const out = new Map<string, number[]>();
   base.forEach((dom, c) => {
-    if (dom) out.set(index.cribs[c]!, result.ok ? [...result.doms[c]!] : []);
+    if (dom) out.set(index.cribs[c]!, result.ok ? result.doms[c]!.filter((p) => p !== ABSENT) : []);
   });
   return out;
 }
@@ -82,7 +87,7 @@ export function forcedMoves(board: Board, level: Level): ForcedMove[] {
 
 /** The forced move a player's move matches, at the lowest level that proves it, or null if it isn't forced. */
 export function explainForced(board: Board, move: Move, level: Level): ForcedMove | null {
-  if (move.kind === "hint") return null;
+  if (move.kind === "hint" || move.kind === "submit") return null;
   const index = indexFor(board.puzzle);
   const node = toNode(index, board);
   const base = l1Domains(index, node);
@@ -101,7 +106,7 @@ export function explainForced(board: Board, move: Move, level: Level): ForcedMov
     if (node.known[a] === b) return null;
     for (let c = 0; c < doms.length; c++) {
       const dom = doms[c];
-      if (dom && dom.length > 0 && dom.every((p) => index.mapAt(c, p)[a] === b)) {
+      if (dom && dom.length > 0 && !dom.includes(ABSENT) && dom.every((p) => index.mapAt(c, p)[a] === b)) {
         return { kind: "swap", pair: pair(move.a, move.b), level: lvl, because: { kind: "implied", crib: index.cribs[c]! } };
       }
     }
@@ -113,23 +118,31 @@ export function explainForced(board: Board, move: Move, level: Level): ForcedMov
   return null;
 }
 
-/** Applies every forced move until none are left. True if that wins the game. */
+/** Applies every forced move until none are left. True if that reaches the goal (see goalOf). */
 export function closure(board: Board, level: Level): boolean {
   const index = indexFor(board.puzzle);
   let node = toNode(index, board);
-  while (!isWon(index, node)) {
+  while (!isGoal(index, node)) {
     const moves = forcedInternal(index, node, level);
     if (moves.length === 0) break;
     for (const move of moves) {
       if (!isApplied(node, move)) node = applyInternal(index, node, move);
     }
   }
-  return isWon(index, node);
+  return isGoal(index, node);
 }
 
 /**
- * The fewest forced moves that win from this board, found by breadth-first search
- * (not greedily). Null if forced moves at this level can't finish the puzzle.
+ * What Cribbot works towards: decrypting every letter, or, when the cribs don't
+ * reveal every letter, placing every real crib (the rest is read from the text).
+ */
+export function goalOf(puzzle: Board["puzzle"]): "decrypted" | "placed" {
+  return variantOf(puzzle).coverage === "partial" ? "placed" : "decrypted";
+}
+
+/**
+ * The fewest forced moves that reach the goal from this board, found by
+ * breadth-first search (not greedily). Null if forced moves at this level can't.
  */
 export function shortestPath(board: Board, level: Level): ForcedMove[] | null {
   const index = indexFor(board.puzzle);
@@ -182,7 +195,7 @@ export function countSolutions(puzzle: Board["puzzle"], limit = 2): number {
 export function findSolutions(puzzle: Board["puzzle"], limit = 2): Record<string, number>[] {
   const index = indexFor(puzzle);
   return search(index, limit).map((pids) =>
-    Object.fromEntries(pids.map((pid, c) => [index.cribs[c]!, index.pidPos[pid]!])),
+    Object.fromEntries(pids.flatMap((pid, c) => (pid === ABSENT ? [] : [[index.cribs[c]!, index.pidPos[pid]!]]))),
   );
 }
 
@@ -190,6 +203,8 @@ export function findSolutions(puzzle: Board["puzzle"], limit = 2): Record<string
 // Internals
 
 const UNKNOWN = -1;
+/** In a domain or an assignment: this crib is the decoy. */
+const ABSENT = -2;
 const code = (letter: string) => letter.charCodeAt(0) - 65;
 const letterOf = (n: number) => ALPHABET[n] as Letter;
 
@@ -206,9 +221,15 @@ class PuzzleIndex {
   readonly pidPos: number[] = [];
   readonly letterCount = new Int16Array(26);
   readonly total: number;
+  /** Exactly one crib isn't in the message. */
+  readonly decoy: boolean;
+  /** Cribs don't reveal every letter, so the goal is to place them all. */
+  readonly partial: boolean;
   private readonly compat: Uint8Array; // 0 = not computed, 1 = compatible, 2 = not
 
-  constructor(ciphertext: string, cribs: readonly string[]) {
+  constructor(ciphertext: string, cribs: readonly string[], variant: Variant) {
+    this.decoy = variant.decoy;
+    this.partial = variant.coverage === "partial";
     this.ct = Int8Array.from(ciphertext, code);
     for (const c of this.ct) this.letterCount[c] = this.letterCount[c]! + 1;
     this.cribs = cribs;
@@ -262,10 +283,11 @@ class PuzzleIndex {
 const indexCache = new Map<string, PuzzleIndex>();
 
 function indexFor(puzzle: Board["puzzle"]): PuzzleIndex {
-  const key = `${puzzle.ciphertext}|${puzzle.cribs.join(",")}`;
+  const variant = variantOf(puzzle);
+  const key = `${puzzle.ciphertext}|${puzzle.cribs.join(",")}|${variant.decoy}|${variant.coverage}`;
   let index = indexCache.get(key);
   if (!index) {
-    index = new PuzzleIndex(puzzle.ciphertext, puzzle.cribs);
+    index = new PuzzleIndex(puzzle.ciphertext, puzzle.cribs, variant);
     if (indexCache.size >= 64) indexCache.delete(indexCache.keys().next().value!);
     indexCache.set(key, index);
   }
@@ -328,13 +350,21 @@ function isWon(index: PuzzleIndex, node: Node): boolean {
   return true;
 }
 
+/** Every letter decrypted, or with partial coverage, every real crib locked (the decoy never is). */
+function isGoal(index: PuzzleIndex, node: Node): boolean {
+  if (!index.partial) return isWon(index, node);
+  let locked = 0;
+  for (const pos of node.lockedPos) if (pos !== UNKNOWN) locked++;
+  return isWon(index, node) || locked === index.cribs.length - (index.decoy ? 1 : 0);
+}
+
 function unpaired(node: Node): number[] {
   const free: number[] = [];
   for (let x = 0; x < 26; x++) if (node.known[x] === UNKNOWN) free.push(x);
   return free;
 }
 
-/** Candidate positions per crib; null for locked cribs. */
+/** Candidate positions per crib (ABSENT: it may be the decoy); null for locked cribs. */
 type Domains = (readonly number[] | null)[];
 type Propagation = { ok: true; doms: Domains } | { ok: false; empty: number };
 
@@ -346,6 +376,7 @@ function l1Domains(index: PuzzleIndex, node: Node): Domains {
       const map = index.mapAt(c, p);
       if (map && consistent(map, node.known) && !overlapsLocked(index, node, c, p)) dom.push(p);
     }
+    if (index.decoy) dom.push(ABSENT);
     return dom;
   });
 }
@@ -366,11 +397,16 @@ function propagateTo(index: PuzzleIndex, base: Domains, level: 2 | 3): Propagati
 function supported(index: PuzzleIndex, doms: Domains, c: number, p: number, d: number): boolean {
   const dom = doms[d];
   if (!dom) return true;
+  // Only one crib can be the decoy, so an absent crib needs every other crib present.
+  if (p === ABSENT) return dom.some((q) => q !== ABSENT);
   const a = index.pid(c, p);
-  return dom.some((q) => index.compatible(a, index.pid(d, q)));
+  return dom.some((q) => q === ABSENT || index.compatible(a, index.pid(d, q)));
 }
 
-/** L2: arc consistency between every pair of unlocked cribs. */
+/**
+ * L2: arc consistency between every pair of unlocked cribs. With a decoy, it also
+ * uses the rule that some crib must be absent: if only one still can be, it is.
+ */
 function propagate(index: PuzzleIndex, input: Domains): Propagation {
   const doms = [...input];
   for (let c = 0; c < doms.length; c++) if (doms[c]?.length === 0) return { ok: false, empty: c };
@@ -384,6 +420,15 @@ function propagate(index: PuzzleIndex, input: Domains): Propagation {
       if (kept.length !== dom.length) {
         if (kept.length === 0) return { ok: false, empty: c };
         doms[c] = kept;
+        changed = true;
+      }
+    }
+    if (index.decoy && !changed) {
+      const absentable = doms.flatMap((dom, c) => (dom?.includes(ABSENT) ? [c] : []));
+      if (absentable.length === 0) return { ok: false, empty: Math.max(0, doms.findIndex((dom) => dom !== null)) };
+      const only = absentable[0]!;
+      if (absentable.length === 1 && doms[only]!.length > 1) {
+        doms[only] = [ABSENT];
         changed = true;
       }
     }
@@ -449,10 +494,10 @@ function forcedInternal(index: PuzzleIndex, node: Node, level: Level): InternalM
       doms = result.doms;
     }
     doms.forEach((dom, c) => {
-      if (dom?.length === 1) add(`lock:${c}`, { kind: "lock", c, p: dom[0]!, level: lvl });
+      if (dom?.length === 1 && dom[0] !== ABSENT) add(`lock:${c}`, { kind: "lock", c, p: dom[0]!, level: lvl });
     });
     doms.forEach((dom, c) => {
-      if (!dom || dom.length < 2) return;
+      if (!dom || dom.length < 2 || dom.includes(ABSENT)) return;
       const first = index.mapAt(c, dom[0]!);
       for (let x = 0; x < 26; x++) {
         const y = first[x]!;
@@ -507,7 +552,7 @@ function nodeKey(node: Node): string {
 const MAX_SEARCH_NODES = 200_000;
 
 function searchPath(index: PuzzleIndex, start: Node, level: Level): InternalMove[] | null {
-  if (isWon(index, start)) return [];
+  if (isGoal(index, start)) return [];
   let frontier: { node: Node; path: InternalMove[] }[] = [{ node: start, path: [] }];
   const seen = new Set([nodeKey(start)]);
   while (frontier.length > 0) {
@@ -524,7 +569,7 @@ function searchPath(index: PuzzleIndex, start: Node, level: Level): InternalMove
         if (seen.has(key)) continue;
         seen.add(key);
         const childPath = [...path, move];
-        if (isWon(index, child)) return childPath;
+        if (isGoal(index, child)) return childPath;
         next.push({ node: child, path: childPath });
       }
       if (seen.size > MAX_SEARCH_NODES) throw new Error("Forced-move search grew too large");
@@ -540,8 +585,10 @@ function search(index: PuzzleIndex, limit: number): number[][] {
   const found: number[][] = [];
   const recurse = (depth: number) => {
     if (found.length >= limit) return;
+    const absent = assigned.includes(ABSENT);
     if (depth === k) {
-      found.push([...assigned]);
+      // With a decoy, exactly one crib must be left out.
+      if (!index.decoy || absent) found.push([...assigned]);
       return;
     }
     // Try the crib with the fewest positions compatible with those already placed.
@@ -552,8 +599,9 @@ function search(index: PuzzleIndex, limit: number): number[][] {
       const list: number[] = [];
       for (let p = 0; p < index.positions(c); p++) {
         const pid = index.pid(c, p);
-        if (index.maps[pid] && assigned.every((other) => other === UNKNOWN || index.compatible(pid, other))) list.push(pid);
+        if (index.maps[pid] && assigned.every((other) => other < 0 || index.compatible(pid, other))) list.push(pid);
       }
+      if (index.decoy && !absent) list.push(ABSENT);
       if (list.length === 0) return;
       if (bestCrib === UNKNOWN || list.length < bestList.length) {
         bestCrib = c;

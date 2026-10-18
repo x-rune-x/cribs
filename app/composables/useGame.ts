@@ -5,7 +5,11 @@ import {
   type Move,
   type MoveResult,
   type Pair,
+  type Placement,
   type PreviewCell,
+  MIN_CRIB_LENGTH,
+  STANDARD_VARIANT,
+  blindBoard,
   comparePairs,
   describeHint,
   describePlacementReason,
@@ -30,11 +34,14 @@ export interface Feedback {
 export interface GridCell {
   cipher: Letter;
   shown: Letter | null;
-  source: PreviewCell["source"] | "revealed";
+  /** "placed" and "clash" are blind mode's unchecked placements. */
+  source: PreviewCell["source"] | "revealed" | "placed" | "clash";
   pencil: Letter | null;
 }
 
-/** Client-side play: previews use only public data, and every move goes to the server. */
+type LetterMap = Partial<Record<Letter, Letter>>;
+
+/** Client-side play: previews use only public data, and every checked move goes to the server. */
 export function useGame() {
   const game = ref<GameView | null>(null);
   const loadError = ref<ApiError | null>(null);
@@ -42,8 +49,16 @@ export function useGame() {
   const selected = ref<string | null>(null);
   const pos = ref(0);
   const feedback = ref<Feedback | null>(null);
-  const pencil = ref<Partial<Record<Letter, Letter>>>({});
+  const pencil = ref<LetterMap>({});
+  // Blind mode: the player's own placements and swaps, kept on this device until they submit.
+  const placed = ref<Placement[]>([]);
+  const declared = ref<Pair[]>([]);
+  // Words the player has typed (your-own-words mode), most recent first.
+  const tried = ref<string[]>([]);
 
+  const variant = computed(() => game.value?.puzzle.variant ?? STANDARD_VARIANT);
+  const blind = computed(() => variant.value.feedback === "blind");
+  const freeWords = computed(() => variant.value.words === "free");
   const playing = computed(() => game.value?.status === "playing");
   const ciphertext = computed(() => game.value?.puzzle.ciphertext ?? "");
   const lockedCribs = computed(() => new Set(game.value?.locked.map((p) => p.crib)));
@@ -52,15 +67,41 @@ export function useGame() {
   const assisted = computed(() => game.value?.mode === "assisted");
   const trying = computed(() => (selected.value && playing.value ? { crib: selected.value, pos: pos.value } : null));
 
+  /** Blind mode: what the player's placements add up to, and where they clash. */
+  const board = computed(() => {
+    const g = game.value;
+    if (!g || !blind.value) return null;
+    return blindBoard(g.puzzle.ciphertext, g.known, placed.value, declared.value);
+  });
+
+  /** Confirmed swaps, plus blind placements that don't clash: the board a preview builds on. */
+  const working = computed<LetterMap>(() => {
+    const g = game.value;
+    if (!g) return {};
+    if (!board.value) return g.known;
+    const map: LetterMap = {};
+    for (const [letter, partners] of Object.entries(board.value.partners) as [Letter, Letter[]][]) {
+      if (partners.length === 1) map[letter] = partners[0]!;
+    }
+    return map;
+  });
+
   const cells = computed<GridCell[]>(() => {
     const g = game.value;
     if (!g) return [];
+    const confirmed = g.known;
+    const clashes = new Set(board.value?.clashes ?? []);
     const base: Omit<GridCell, "pencil">[] = trying.value
-      ? preview(g, trying.value.crib, trying.value.pos)
+      ? preview({ puzzle: g.puzzle, known: working.value }, trying.value.crib, trying.value.pos).map((cell) => ({
+          ...cell,
+          source: cell.source === "known" && !confirmed[cell.cipher] ? ("placed" as const) : cell.source,
+        }))
       : [...g.puzzle.ciphertext].map((ch, i) => {
           const cipher = ch as Letter;
-          const known = g.known[cipher] ?? null;
-          if (known) return { cipher, shown: known, source: "known" as const };
+          if (confirmed[cipher]) return { cipher, shown: confirmed[cipher]!, source: "known" as const };
+          if (clashes.has(cipher)) return { cipher, shown: null, source: "clash" as const };
+          const mine = board.value ? working.value[cipher] : undefined;
+          if (mine) return { cipher, shown: mine, source: "placed" as const };
           // After a loss, show the rest of the message as revealed rather than found.
           const revealed = g.finished ? (g.finished.plaintext[i] as Letter) : null;
           return { cipher, shown: revealed, source: revealed ? ("revealed" as const) : null };
@@ -77,7 +118,7 @@ export function useGame() {
     for (let i = 0; i < t.crib.length; i++) {
       const w = t.crib[i] as Letter;
       const c = g.puzzle.ciphertext[t.pos + i] as Letter;
-      if (w !== c && g.known[w] !== c) pairs.set(pair(w, c).join(""), pair(w, c));
+      if (w !== c && working.value[w] !== c) pairs.set(pair(w, c).join(""), pair(w, c));
     }
     return [...pairs.values()].sort(comparePairs);
   });
@@ -86,11 +127,13 @@ export function useGame() {
   const scan = computed(() => {
     const g = game.value;
     if (!assisted.value || !g || !selected.value) return null;
-    return scanPlacements(g.puzzle.ciphertext, selected.value, g.known, g.locked);
+    return scanPlacements(g.puzzle.ciphertext, selected.value, working.value, freeWords.value ? [] : [...g.locked, ...placed.value]);
   });
 
   const knownPairs = computed(() => (game.value ? pairsOf(game.value.known) : []));
   const pencilPairs = computed(() => pairsOf(pencil.value));
+  /** Letters in the message that still need a partner before a blind submission. */
+  const unassigned = computed(() => [...new Set(ciphertext.value)].filter((c) => !working.value[c as Letter]).length);
 
   async function start(request: StartGameRequest) {
     busy.value = true;
@@ -99,7 +142,8 @@ export function useGame() {
       game.value = await api<GameView>("/api/games", { method: "POST", body: request });
       selected.value = null;
       feedback.value = null;
-      loadPencil();
+      tried.value = [];
+      loadLocal();
     } catch (error) {
       loadError.value = apiError(error);
     } finally {
@@ -107,14 +151,23 @@ export function useGame() {
     }
   }
 
-  function select(crib: string) {
-    if (!playing.value || lockedCribs.value.has(crib) || selected.value === crib) return;
-    selected.value = crib;
-    pos.value = firstClearPosition(ciphertext.value, crib, game.value!.locked);
+  /** Picks a word to slide: a listed crib, or (with your own words) any word typed. */
+  function select(word: string) {
+    const g = game.value;
+    if (!g || !playing.value || selected.value === word) return;
+    if (freeWords.value) {
+      if (!/^[A-Z]+$/.test(word) || word.length < MIN_CRIB_LENGTH || word.length > g.puzzle.ciphertext.length) return;
+      tried.value = [word, ...tried.value.filter((w) => w !== word)].slice(0, 8);
+    } else if (lockedCribs.value.has(word)) {
+      return;
+    }
+    selected.value = word;
+    const mine = blind.value && !freeWords.value ? placed.value.find((p) => p.crib === word) : undefined;
+    pos.value = mine ? mine.pos : firstClearPosition(g.puzzle.ciphertext, word, [...g.locked, ...placed.value]);
   }
 
   function cycle(direction: 1 | -1) {
-    const list = unlocked.value;
+    const list = freeWords.value ? tried.value : unlocked.value;
     if (list.length === 0) return;
     const index = selected.value ? list.indexOf(selected.value) : direction === 1 ? -1 : 0;
     select(list[(index + direction + list.length) % list.length]!);
@@ -137,7 +190,8 @@ export function useGame() {
       game.value = response.game;
       feedback.value = describeResult(move, response.result, response.game);
       if (move.kind === "lock" && response.result.kind === "lock" && response.result.correct) selected.value = null;
-      prunePencil();
+      if (response.result.kind === "hint" && response.result.revealed.length > 0) dropConfirmedPlacements();
+      pruneLocal();
     } catch (error) {
       feedback.value = { tone: "bad", text: apiError(error).message };
     } finally {
@@ -145,8 +199,36 @@ export function useGame() {
     }
   }
 
-  const lock = () => (selected.value ? submit({ kind: "lock", crib: selected.value, pos: pos.value }) : undefined);
-  const declare = (a: Letter, b: Letter) => submit({ kind: "swap", a, b });
+  function lock() {
+    const word = selected.value;
+    if (!word) return;
+    if (!blind.value) return submit({ kind: "lock", crib: word, pos: pos.value });
+    // Blind mode: place it here without telling the server. It can be moved or removed freely.
+    const placement = { crib: word, pos: pos.value };
+    const others = placed.value.filter((p) => (freeWords.value ? p.crib !== word || p.pos !== placement.pos : p.crib !== word));
+    placed.value = [...others, placement];
+    selected.value = null;
+    saveLocal();
+    feedback.value = { tone: "info", text: `${word} placed at ${placement.pos + 1}. Nothing is checked until you submit.` };
+  }
+
+  function unplace(placement: Placement) {
+    placed.value = placed.value.filter((p) => p.crib !== placement.crib || p.pos !== placement.pos);
+    saveLocal();
+  }
+
+  function declare(a: Letter, b: Letter) {
+    if (!blind.value) return submit({ kind: "swap", a, b });
+    declared.value = [...declared.value.filter(([x, y]) => x !== a && y !== a && x !== b && y !== b), pair(a, b)];
+    saveLocal();
+    feedback.value = { tone: "info", text: `${a}⇄${b} noted. Nothing is checked until you submit.` };
+  }
+
+  function undeclare(p: Pair) {
+    declared.value = declared.value.filter((d) => d.join("") !== p.join(""));
+    saveLocal();
+  }
+
   const askHint = () => submit({ kind: "hint" });
 
   function playHint(hint: Hint) {
@@ -156,6 +238,12 @@ export function useGame() {
       pos.value = move.pos;
     }
     return submit(move);
+  }
+
+  /** Blind mode: send the whole decryption to be checked. */
+  function submitDecryption() {
+    const mapping = board.value?.mapping;
+    if (mapping) return submit({ kind: "submit", mapping });
   }
 
   async function enableAssist() {
@@ -168,25 +256,29 @@ export function useGame() {
     }
   }
 
-  // Pencil notes are free and stay in this browser.
+  // Pencil notes, blind placements and declared swaps are free and stay in this browser.
 
-  const pencilKey = () => `crib:pencil:${game.value?.id}`;
+  const storageKey = () => `crib:local:${game.value?.id}`;
 
-  function loadPencil() {
+  function loadLocal() {
     try {
-      pencil.value = JSON.parse(localStorage.getItem(pencilKey()) ?? "{}");
+      const saved = JSON.parse(localStorage.getItem(storageKey()) ?? "{}");
+      pencil.value = saved.pencil ?? {};
+      placed.value = saved.placed ?? [];
+      declared.value = saved.declared ?? [];
     } catch {
       pencil.value = {};
+      placed.value = [];
+      declared.value = [];
     }
-    prunePencil();
+    pruneLocal();
   }
 
-  function savePencil(next: Partial<Record<Letter, Letter>>) {
-    pencil.value = next;
+  function saveLocal() {
     try {
-      localStorage.setItem(pencilKey(), JSON.stringify(next));
+      localStorage.setItem(storageKey(), JSON.stringify({ pencil: pencil.value, placed: placed.value, declared: declared.value }));
     } catch {
-      // Storage may be unavailable; notes then last for this visit only.
+      // Storage may be unavailable; these then last for this visit only.
     }
   }
 
@@ -198,7 +290,8 @@ export function useGame() {
     }
     next[a] = b;
     next[b] = a;
-    savePencil(next);
+    pencil.value = next;
+    saveLocal();
   }
 
   function clearPencil(letter: Letter) {
@@ -206,10 +299,12 @@ export function useGame() {
     const partner = next[letter];
     delete next[letter];
     if (partner) delete next[partner];
-    savePencil(next);
+    pencil.value = next;
+    saveLocal();
   }
 
-  function prunePencil() {
+  /** Drops pencil notes for letters that are now confirmed. */
+  function pruneLocal() {
     const known = game.value?.known ?? {};
     const next = { ...pencil.value };
     for (const [a, b] of pairsOf(next)) {
@@ -218,7 +313,17 @@ export function useGame() {
         delete next[b];
       }
     }
-    if (Object.keys(next).length !== Object.keys(pencil.value).length) savePencil(next);
+    if (Object.keys(next).length !== Object.keys(pencil.value).length) {
+      pencil.value = next;
+      saveLocal();
+    }
+  }
+
+  /** A hint confirmed a word in blind mode: the player's own placement of it is no longer needed. */
+  function dropConfirmedPlacements() {
+    const confirmed = new Set(game.value?.locked.map((p) => p.crib));
+    placed.value = placed.value.filter((p) => freeWords.value || !confirmed.has(p.crib));
+    saveLocal();
   }
 
   return {
@@ -228,12 +333,20 @@ export function useGame() {
     selected,
     pos,
     feedback,
+    variant,
+    blind,
+    freeWords,
     playing,
     unlocked,
     spotCount,
     assisted,
     trying,
+    board,
     cells,
+    placed,
+    declared,
+    tried,
+    unassigned,
     previewPairs,
     scan,
     knownPairs,
@@ -245,9 +358,12 @@ export function useGame() {
     moveTo,
     slide,
     lock,
+    unplace,
     declare,
+    undeclare,
     askHint,
     playHint,
+    submitDecryption,
     enableAssist,
     setPencil,
     clearPencil,
@@ -256,7 +372,15 @@ export function useGame() {
 
 function describeResult(move: Move, result: MoveResult, game: GameView): Feedback {
   const tally = `Mistake ${game.mistakes} of ${game.maxMistakes}.`;
-  if (result.kind === "hint") return { tone: "info", text: `Cribbot: ${describeHint(result.hint)}`, hint: result.hint };
+  if (result.kind === "hint") {
+    const confirmed = result.revealed.length > 0 ? " Confirmed on the board." : "";
+    return { tone: "info", text: `Cribbot: ${describeHint(result.hint)}${confirmed}`, hint: result.revealed.length ? undefined : result.hint };
+  }
+  if (result.kind === "submit") {
+    return result.correct
+      ? { tone: "good", text: "That's it: the message is decrypted." }
+      : { tone: "bad", text: `That isn't right yet. ${tally}` };
+  }
   if (move.kind === "lock" && result.kind === "lock") {
     const where = `${move.crib} at ${move.pos + 1}`;
     if (result.correct) {

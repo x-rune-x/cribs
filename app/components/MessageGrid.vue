@@ -6,6 +6,8 @@ import type { GridCell } from "~/composables/useGame";
 const props = defineProps<{
   cells: GridCell[];
   locked: readonly Placement[];
+  /** Blind mode: the player's unchecked placements. */
+  placed?: readonly Placement[];
   trying: Placement | null;
 }>();
 
@@ -24,10 +26,13 @@ onMounted(() => {
 });
 onBeforeUnmount(() => observer?.disconnect());
 
-type Span = Placement & { kind: "locked" | "trying" };
+type Span = Placement & { kind: "locked" | "placed" | "trying" };
+
+const LABELS = { locked: "locked", placed: "placed", trying: "trying" } as const;
 
 const spans = computed<Span[]>(() => [
   ...props.locked.map((p) => ({ ...p, kind: "locked" as const })),
+  ...(props.placed ?? []).map((p) => ({ ...p, kind: "placed" as const })),
   ...(props.trying ? [{ ...props.trying, kind: "trying" as const }] : []),
 ]);
 
@@ -52,7 +57,7 @@ const rows = computed(() => {
       labels: spans.value
         .filter((s) => s.pos >= start && s.pos < end)
         .map((s) => ({
-          text: `${s.crib} · ${s.kind === "locked" ? "locked" : "trying"}`,
+          text: `${s.crib} · ${LABELS[s.kind]}`,
           kind: s.kind,
           col: s.pos - start + 1,
           span: Math.min(s.crib.length, end - s.pos),
@@ -66,6 +71,7 @@ const gridStyle = computed(() => ({ gridTemplateColumns: `repeat(${columns.value
 
 function shown(cell: GridCell): string {
   if (cell.shown) return cell.shown;
+  if (cell.source === "clash") return "?";
   if (cell.pencil) return cell.pencil.toLowerCase();
   return "·";
 }
@@ -82,8 +88,10 @@ function describe(i: number): string {
   if (cell.source === "known") parts.push(`decrypts to ${cell.shown}`);
   else if (cell.source === "crib" || cell.source === "implied") parts.push(`would decrypt to ${cell.shown}`);
   else if (cell.source === "revealed") parts.push(`was ${cell.shown}`);
+  else if (cell.source === "placed") parts.push(`placed as ${cell.shown}, unchecked`);
+  else if (cell.source === "clash") parts.push("your placements disagree here");
   else parts.push(cell.pencil ? `pencilled as ${cell.pencil}` : "unknown");
-  if (span) parts.push(span.kind === "locked" ? `in ${span.crib}, locked` : `under ${span.crib}`);
+  if (span) parts.push(span.kind === "trying" ? `under ${span.crib}` : `in ${span.crib}, ${LABELS[span.kind]}`);
   return parts.join(", ");
 }
 </script>
@@ -101,8 +109,8 @@ function describe(i: number): string {
       </ol>
       <div v-if="row.labels.length" class="labels" :style="gridStyle" aria-hidden="true">
         <span
-          v-for="label in row.labels"
-          :key="label.text"
+          v-for="(label, n) in row.labels"
+          :key="n"
           class="label"
           :class="label.kind"
           :style="{ gridColumn: `${label.col} / span ${label.span}` }"
@@ -164,6 +172,13 @@ function describe(i: number): string {
   box-shadow: inset 0 0 0 2px var(--locked-line);
 }
 
+/* Unchecked placements in blind mode: dashed, so they never look confirmed. */
+.tile.placed {
+  background: var(--raised);
+  outline: 2px dashed var(--muted);
+  outline-offset: -2px;
+}
+
 .tile.trying {
   background: var(--amber-tint);
   box-shadow: inset 0 0 0 2px var(--amber);
@@ -187,6 +202,16 @@ function describe(i: number): string {
 .plain.implied {
   color: var(--amber);
   text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.plain.placed {
+  color: var(--text);
+}
+
+.plain.clash {
+  color: var(--amber);
+  text-decoration: underline wavy;
   text-underline-offset: 3px;
 }
 
@@ -221,5 +246,9 @@ function describe(i: number): string {
 
 .label.trying {
   color: var(--amber);
+}
+
+.label.placed {
+  color: var(--muted);
 }
 </style>

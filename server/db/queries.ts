@@ -42,8 +42,9 @@ export function findDailyPuzzle(db: Db, date: string): PuzzleRow | undefined {
     .get();
 }
 
-export function listPracticePuzzles(db: Db): PuzzleRow[] {
-  return db.select().from(puzzles).where(eq(puzzles.kind, "practice")).orderBy(puzzles.number).all();
+/** Practice or Lab puzzles, in number order. */
+export function listPuzzlesOfKind(db: Db, kind: "practice" | "lab"): PuzzleRow[] {
+  return db.select().from(puzzles).where(eq(puzzles.kind, kind)).orderBy(puzzles.number).all();
 }
 
 export function puzzleIdsIn(db: Db, ids: string[]): Set<string> {

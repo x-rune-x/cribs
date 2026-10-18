@@ -2,11 +2,12 @@
 // that the result has one solution, covers the message and hits the target
 // difficulty.
 
-import { type Key, applyKey, createRng, generateKey } from "./cipher";
+import { type Key, type Letter, type Rng, applyKey, createRng, generateKey, pair } from "./cipher";
 import { CRIB_COUNT, GENERATED_DIFFICULTIES, MESSAGE_LENGTH, MIN_CRIB_LENGTH } from "./config";
 import { type Grade, grade } from "./grader";
 import { countSolutions } from "./solver";
 import type { Difficulty, PublicPuzzle, Solution } from "./state";
+import { type Variant, variantOf } from "./variants";
 
 export interface Message {
   /** Upper-case words separated by single spaces, as shown on the end screen. */
@@ -161,4 +162,178 @@ export function generatePuzzle(message: Message, options: GenerateOptions): Gene
     if (rank === 0 && stopEarly) break;
   }
   return best?.generated ?? null;
+}
+
+// Lab variants
+
+/** Distinct swaps the player must read for the message letters that the cribs don't reveal. */
+export function uncoveredPairs(ciphertext: string, plaintext: string, cribs: readonly string[]): number {
+  const revealed = new Set<string>();
+  for (const crib of cribs) {
+    const pos = plaintext.indexOf(crib);
+    for (let i = 0; i < crib.length; i++) {
+      revealed.add(crib[i]!);
+      revealed.add(ciphertext[pos + i]!);
+    }
+  }
+  return pairsToRead(ciphertext, plaintext, revealed);
+}
+
+function pairsToRead(ciphertext: string, plaintext: string, revealed: Set<string>): number {
+  const pairs = new Set<string>();
+  for (let i = 0; i < ciphertext.length; i++) {
+    const c = ciphertext[i]!;
+    if (!revealed.has(c)) pairs.add(pair(c as Letter, plaintext[i] as Letter).join(""));
+  }
+  return pairs.size;
+}
+
+/**
+ * Par when players bring their own words: the fewest moves that decrypt
+ * everything, using message words of 3+ letters at their positions plus a
+ * declared swap for each pair the words leave out.
+ */
+export function wordCoverPar(message: Message, ciphertext: string): number {
+  const words: { word: string; pos: number }[] = [];
+  let pos = 0;
+  for (const word of message.words) {
+    if (word.length >= MIN_CRIB_LENGTH) words.push({ word, pos });
+    pos += word.length;
+  }
+  const n = Math.min(words.length, 16);
+  let best = Infinity;
+  for (let mask = 0; mask < 1 << n; mask++) {
+    const revealed = new Set<string>();
+    let used = 0;
+    for (let i = 0; i < n; i++) {
+      if (!(mask & (1 << i))) continue;
+      used++;
+      const { word, pos: at } = words[i]!;
+      for (let j = 0; j < word.length; j++) {
+        revealed.add(word[j]!);
+        revealed.add(ciphertext[at + j]!);
+      }
+    }
+    best = Math.min(best, used + pairsToRead(ciphertext, message.plaintext, revealed));
+  }
+  return best;
+}
+
+function pickDecoy(rng: Rng, pool: readonly string[], message: Message): string | null {
+  const options = pool.filter(
+    (w) => w.length >= MIN_CRIB_LENGTH && w.length <= 8 && /^[A-Z]+$/.test(w) && !message.plaintext.includes(w),
+  );
+  return options.length > 0 ? rng.pick(options) : null;
+}
+
+export interface VariantOptions {
+  readonly seed: string;
+  /** Words a decoy can be drawn from, e.g. every word of every message. */
+  readonly decoyPool?: readonly string[];
+  readonly attempts?: number;
+}
+
+/** Makes a puzzle for a Lab variant, or null if no attempt works for this message. */
+export function generateVariant(message: Message, variant: Variant, options: VariantOptions): GeneratedPuzzle | null {
+  const blind = variant.feedback === "blind";
+  const text = message.text;
+  if (variant.words === "free") {
+    const seed = `${options.seed}:0`;
+    const key = generateKey(createRng(seed));
+    const ciphertext = applyKey(key, message.plaintext);
+    const par = blind ? 0 : wordCoverPar(message, ciphertext);
+    return {
+      puzzle: { ciphertext, cribs: [], difficulty: "hard", par, variant },
+      solution: { plaintext: message.plaintext, positions: {}, key },
+      text,
+      seed,
+    };
+  }
+
+  const words = cribCandidates(message);
+  const [min, max] = variant.coverage === "partial" ? [2, 3] : [CRIB_COUNT.min, CRIB_COUNT.max];
+  if (words.length < min) return null;
+  for (let i = 0; i < (options.attempts ?? 200); i++) {
+    const seed = `${options.seed}:${i}`;
+    const rng = createRng(seed);
+    const key = generateKey(rng);
+    const real = rng.shuffle(words).slice(0, rng.range(min, Math.min(max, words.length)));
+    const decoy = variant.decoy ? pickDecoy(rng, options.decoyPool ?? [], message) : null;
+    if (variant.decoy && !decoy) return null;
+    const cribs = [...real, ...(decoy ? [decoy] : [])].sort();
+    const ciphertext = applyKey(key, message.plaintext);
+    const puzzle = { ciphertext, cribs, variant };
+    if (countSolutions(puzzle, 2) !== 1) continue;
+    const toRead = uncoveredPairs(ciphertext, message.plaintext, real);
+    if (variant.coverage === "full" ? toRead !== 0 : toRead < 1 || toRead > 3) continue;
+    const graded = grade(puzzle);
+    if (!graded) continue;
+    return {
+      puzzle: { ...puzzle, difficulty: graded.difficulty, par: blind ? 0 : graded.par + toRead },
+      solution: {
+        plaintext: message.plaintext,
+        positions: Object.fromEntries(real.map((crib) => [crib, message.plaintext.indexOf(crib)])),
+        key,
+      },
+      text,
+      seed,
+    };
+  }
+  return null;
+}
+
+function isVariant(value: unknown): value is Variant {
+  const v = value as Variant | undefined;
+  return (
+    !!v &&
+    (v.words === "cribs" || v.words === "free") &&
+    (v.feedback === "per-move" || v.feedback === "blind") &&
+    (v.coverage === "full" || v.coverage === "partial") &&
+    typeof v.decoy === "boolean"
+  );
+}
+
+/**
+ * Re-checks a generated puzzle of any variant against the engine, so a bad file
+ * can't reach players. Returns what's wrong, or null.
+ */
+export function verifyPuzzle(puzzle: PublicPuzzle, solution: Solution, text: string): string | null {
+  if (puzzle.variant !== undefined && !isVariant(puzzle.variant)) return "its variant isn't valid";
+  const variant = variantOf(puzzle);
+  const blind = variant.feedback === "blind";
+  try {
+    if (applyKey(solution.key, solution.plaintext) !== puzzle.ciphertext) {
+      return "the key doesn't encrypt the plaintext to the ciphertext";
+    }
+  } catch {
+    return "the key doesn't cover the message";
+  }
+  if (text.replace(/ /g, "") !== solution.plaintext) return "the text doesn't match the plaintext";
+  if ([...puzzle.cribs].sort().join() !== puzzle.cribs.join()) return "the cribs aren't in alphabetical order";
+
+  if (variant.words === "free") {
+    if (puzzle.cribs.length > 0) return "a puzzle where players bring their own words can't list cribs";
+    const par = blind ? 0 : wordCoverPar(parseMessage(text), puzzle.ciphertext);
+    return puzzle.par === par ? null : "its par doesn't match the engine";
+  }
+
+  const real = puzzle.cribs.filter((crib) => solution.positions[crib] !== undefined);
+  const decoys = puzzle.cribs.filter((crib) => solution.positions[crib] === undefined);
+  if (decoys.length !== (variant.decoy ? 1 : 0)) {
+    return variant.decoy ? "a decoy puzzle needs exactly one decoy" : "every crib needs a position";
+  }
+  if (decoys.some((d) => solution.plaintext.includes(d))) return "the decoy is in the message";
+  for (const crib of real) {
+    const pos = solution.positions[crib]!;
+    if (solution.plaintext.slice(pos, pos + crib.length) !== crib) return `${crib} isn't at its stated position`;
+  }
+  if (countSolutions(puzzle, 2) !== 1) return "it doesn't have exactly one solution";
+  const toRead = uncoveredPairs(puzzle.ciphertext, solution.plaintext, real);
+  if (variant.coverage === "full" && toRead > 0) return "the cribs don't reveal every letter";
+  if (variant.coverage === "partial" && toRead === 0) return "partial coverage needs some letters left to read";
+  const graded = grade(puzzle);
+  if (!graded) return "logic can't place the cribs";
+  const par = blind ? 0 : graded.par + toRead;
+  if (graded.difficulty !== puzzle.difficulty || par !== puzzle.par) return "its difficulty or par doesn't match the engine";
+  return null;
 }

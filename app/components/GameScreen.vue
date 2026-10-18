@@ -8,7 +8,7 @@ const props = defineProps<{ request: StartGameRequest }>();
 
 const g = useGame();
 const help = ref<InstanceType<typeof HowToPlay> | null>(null);
-const { game, selected, pos, playing, feedback, busy } = g;
+const { game, selected, pos, playing, feedback, busy, blind, freeWords, variant } = g;
 
 onMounted(() => {
   g.start(props.request);
@@ -19,8 +19,36 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 const kicker = computed(() => {
   const p = game.value?.puzzle;
   if (!p) return "";
+  const number = `No. ${String(p.number).padStart(3, "0")}`;
+  if (p.kind === "lab") return `Lab · ${number} · ${p.label ?? "Experimental"}`;
   const difficulty = p.difficulty[0]!.toUpperCase() + p.difficulty.slice(1);
-  return `${p.kind === "daily" ? "Daily" : "Practice"} · No. ${String(p.number).padStart(3, "0")} · ${difficulty} · Par ${p.par}`;
+  return `${p.kind === "daily" ? "Daily" : "Practice"} · ${number} · ${difficulty} · Par ${p.par}`;
+});
+
+/** What's different about a Lab puzzle's rules. */
+const notes = computed(() => {
+  if (game.value?.puzzle.kind !== "lab") return [];
+  const v = variant.value;
+  const lines: string[] = [];
+  if (v.words === "free") lines.push("No word list: type a word you think is in the message and slide it along.");
+  if (v.decoy) lines.push("One of the listed words isn't in the message.");
+  if (v.coverage === "partial") lines.push("The words won't reveal every letter. Read what's left and declare the swaps.");
+  if (v.feedback === "blind") {
+    lines.push("Blind: placements aren't checked. Move and remove them freely, then submit the whole decryption. A wrong submission is a mistake.");
+  }
+  return lines;
+});
+
+const placedCribs = computed(() => g.placed.value.map((p) => p.crib));
+
+/** The main button: lock (or place, in blind mode) the word being slid, or submit a blind decryption. */
+const primary = computed(() => {
+  if (selected.value) return { label: `${blind.value ? "Place" : "Lock"} ${selected.value} at ${pos.value + 1}`, enabled: true, run: g.lock };
+  if (blind.value) {
+    const ready = !!g.board.value?.mapping;
+    return { label: ready ? "Submit decryption" : "Give every letter a partner to submit", enabled: ready, run: g.submitDecryption };
+  }
+  return { label: "Pick a word to place", enabled: false, run: g.lock };
 });
 
 const mistakePips = computed(() => {
@@ -88,6 +116,10 @@ function onKey(event: KeyboardEvent) {
       </button>
     </header>
 
+    <ul v-if="notes.length" class="notes panel" aria-label="Lab rules">
+      <li v-for="note in notes" :key="note">{{ note }}</li>
+    </ul>
+
     <div v-if="g.loadError.value" class="panel notice" role="alert">
       <template v-if="g.loadError.value.code === 'no-daily'">
         <p>There's no puzzle for today yet.</p>
@@ -101,7 +133,7 @@ function onKey(event: KeyboardEvent) {
     <p v-else-if="!game" class="muted" role="status">Intercepting the message…</p>
 
     <template v-else>
-      <MessageGrid :cells="g.cells.value" :locked="game.locked" :trying="g.trying.value" />
+      <MessageGrid :cells="g.cells.value" :locked="game.locked" :placed="blind ? g.placed.value : []" :trying="g.trying.value" />
 
       <EndSummary v-if="game.finished" :game="game" @again="playAgain" />
 
@@ -116,8 +148,19 @@ function onKey(event: KeyboardEvent) {
           @step="g.slide"
         />
 
+        <BlindPanel
+          v-if="blind && g.board.value"
+          :placed="g.placed.value"
+          :declared="g.declared.value"
+          :board="g.board.value"
+          :unassigned="g.unassigned.value"
+          @unplace="g.unplace"
+          @undeclare="g.undeclare"
+        />
+
         <SwapsPanel
           :known="game.known"
+          :blind="blind"
           :known-pairs="g.knownPairs.value"
           :preview-pairs="g.previewPairs.value"
           :pencil-pairs="g.pencilPairs.value"
@@ -129,7 +172,24 @@ function onKey(event: KeyboardEvent) {
           @unpencil="g.clearPencil"
         />
 
-        <CribList :cribs="game.puzzle.cribs" :locked="game.locked" :selected="selected" :disabled="busy" @select="g.select" />
+        <WordEntry
+          v-if="freeWords"
+          :selected="selected"
+          :tried="g.tried.value"
+          :max-length="game.puzzle.ciphertext.length"
+          :disabled="busy"
+          @select="g.select"
+        />
+        <CribList
+          v-else
+          :cribs="game.puzzle.cribs"
+          :locked="game.locked"
+          :placed="placedCribs"
+          :decoy="variant.decoy"
+          :selected="selected"
+          :disabled="busy"
+          @select="g.select"
+        />
 
         <label v-if="game.mode !== 'ranked'" class="assist">
           <input type="checkbox" :checked="g.assisted.value" :disabled="g.assisted.value" @change="g.enableAssist()" />
@@ -142,7 +202,7 @@ function onKey(event: KeyboardEvent) {
         <!-- Kept on screen on phones, so the Lock button and each move's result stay visible. -->
         <div class="dock">
           <p class="status">
-            <span>Moves <strong class="mono">{{ game.moves }}</strong> · par {{ game.puzzle.par }}</span>
+            <span v-if="!blind">Moves <strong class="mono">{{ game.moves }}</strong> · par {{ game.puzzle.par }}</span>
             <span>
               Mistakes <span class="pips mono" aria-hidden="true">{{ mistakePips }}</span>
               <span class="visually-hidden">{{ game.mistakes }} of {{ game.maxMistakes }}</span>
@@ -166,8 +226,8 @@ function onKey(event: KeyboardEvent) {
               Cancel
             </button>
             <button v-else type="button" class="btn" :disabled="busy" @click="g.askHint">Hint</button>
-            <button type="button" class="btn btn-primary" :disabled="!selected || busy" @click="g.lock">
-              {{ selected ? `Lock ${selected} at ${pos + 1}` : "Pick a word to place" }}
+            <button type="button" class="btn btn-primary" :disabled="!primary.enabled || busy" @click="primary.run">
+              {{ primary.label }}
             </button>
           </nav>
         </div>
@@ -221,6 +281,18 @@ h1 {
   align-items: center;
   justify-content: center;
   cursor: pointer;
+}
+
+.notes {
+  margin: 0;
+  padding: 10px 14px 10px 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--muted);
+  border-color: var(--amber);
 }
 
 .notice {

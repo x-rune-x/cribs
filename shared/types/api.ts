@@ -1,20 +1,23 @@
 // Shapes the API sends and receives. Nothing here may carry a solution until a
 // game has finished.
 
-import type { Difficulty, GameStatus, Hint, Move, MoveResult, Placement, PlacementReason, SwapMap, SwapReason } from "#engine";
+import type { Difficulty, GameStatus, Hint, Move, MoveResult, Placement, PlacementReason, SwapMap, SwapReason, Variant } from "#engine";
 
 export type GameMode = "ranked" | "practice" | "assisted";
 
 export interface PuzzleView {
   id: string;
   number: number;
-  kind: "daily" | "practice";
+  kind: "daily" | "practice" | "lab";
   /** The local date a daily puzzle is for. */
   date: string | null;
   ciphertext: string;
   cribs: string[];
   difficulty: Difficulty;
   par: number;
+  variant: Variant;
+  /** Lab puzzles: the variant's name. */
+  label: string | null;
 }
 
 export interface MoveLogEntry {
@@ -60,6 +63,8 @@ export interface MoveResponse {
 export interface PracticeItem {
   id: string;
   number: number;
+  label: string | null;
+  variant: Variant;
   difficulty: Difficulty;
   par: number;
   length: number;
@@ -80,6 +85,8 @@ export interface PuzzleFileEntry {
   difficulty: Difficulty;
   par: number;
   length: number;
+  variant?: Variant;
+  label?: string;
 }
 
 export interface SolutionFileEntry {
@@ -96,6 +103,8 @@ export interface ImportRequest {
   solutions: SolutionFileEntry[];
   /** Make the first `count` new puzzles daily, on consecutive free dates from `from`. The rest become practice. */
   daily?: { count: number; from: string };
+  /** Import as Lab puzzles (experimental variants) instead of practice. */
+  lab?: boolean;
 }
 
 export interface ImportSummary {

@@ -4,6 +4,7 @@
 //   npm run generate -- --difficulty medium  only Medium puzzles
 //   npm run generate -- --survey             sample every message, print stats, write nothing
 //   npm run generate -- --check              check the messages file
+//   npm run generate -- --lab                puzzles for every Lab variant
 //
 // Output stays in data/, which git ignores: solutions must never be committed.
 
@@ -17,11 +18,13 @@ import {
   GENERATED_DIFFICULTIES,
   GENERATOR_VERSION,
   type GeneratedPuzzle,
+  LAB_VARIANTS,
   type Message,
   createRng,
   cribCandidates,
   formatKey,
   generatePuzzle,
+  generateVariant,
   messageProblems,
   parseMessages,
 } from "../src/engine";
@@ -39,6 +42,10 @@ const HELP = `Usage: npm run generate -- [options]
   --survey             sample every message and print stats only
   --check              check the messages file and exit
   --verbose            print each puzzle's message (spoilers)
+
+  --lab                make puzzles for every Lab variant instead
+  --per-variant <n>    Lab puzzles per variant (default 3)
+  --lab-messages <f>   grammar-light messages for the "Lists" variants (default content/lab-messages.txt)
 `;
 
 type Tier = (typeof GENERATED_DIFFICULTIES)[number];
@@ -58,6 +65,9 @@ const { values: args } = parseArgs({
     survey: { type: "boolean", default: false },
     check: { type: "boolean", default: false },
     verbose: { type: "boolean", default: false },
+    lab: { type: "boolean", default: false },
+    "per-variant": { type: "string", default: "3" },
+    "lab-messages": { type: "string", default: "content/lab-messages.txt" },
     help: { type: "boolean", short: "h", default: false },
   },
 });
@@ -84,6 +94,13 @@ async function main() {
   const cribCount = { min: positiveInt("min-cribs", args["min-cribs"], 3), max: positiveInt("max-cribs", args["max-cribs"], 6) };
   const stats = new Stats();
   const started = performance.now();
+
+  if (args.lab) {
+    const lists = parseMessages(await readFile(path.resolve(args["lab-messages"]), "utf8")).filter((m) => messageProblems(m).length === 0);
+    await generateLab(seed, positiveInt("per-variant", args["per-variant"], 3), usable, lists);
+    console.log(`Done in ${((performance.now() - started) / 1000).toFixed(1)}s.`);
+    return;
+  }
 
   if (args.survey) {
     const attempts = positiveInt("attempts", args.attempts, 40);
@@ -160,16 +177,51 @@ function checkMessages(messages: Message[]): boolean {
   return ok;
 }
 
-async function writeRun(dir: string, seed: string, kept: { id: string; generated: GeneratedPuzzle }[]) {
+/** Makes `perVariant` puzzles for each Lab variant, each from a different message where possible. */
+async function generateLab(seed: string, perVariant: number, sentences: Message[], lists: Message[]) {
+  const decoyPool = [...new Set([...sentences, ...lists].flatMap((m) => m.words))];
+  const kept: { id: string; label: string; generated: GeneratedPuzzle }[] = [];
+  console.log(`Generating ${perVariant} Lab puzzles per variant (seed ${seed})…\n`);
+  for (const [v, { label, variant, messages }] of LAB_VARIANTS.entries()) {
+    const source = createRng(`${seed}:${label}`).shuffle(messages === "lists" ? lists : sentences);
+    const made: GeneratedPuzzle[] = [];
+    let tried = 0;
+    for (const [i, message] of source.entries()) {
+      if (made.length >= perVariant) break;
+      tried++;
+      const generated = generateVariant(message, variant, { seed: `${seed}:${v}:${i}`, decoyPool, attempts: 200 });
+      if (generated) made.push(generated);
+    }
+    for (const generated of made) {
+      kept.push({ id: `${seed}-lab-${String(kept.length + 1).padStart(3, "0")}`, label, generated });
+    }
+    const tiers = (["easy", "medium", "hard"] as const)
+      .map((d) => [d, made.filter((g) => g.puzzle.difficulty === d).length] as const)
+      .filter(([, n]) => n > 0)
+      .map(([d, n]) => `${d} ${n}`)
+      .join(", ");
+    const pars = made.map((g) => g.puzzle.par);
+    const parText = variant.feedback === "blind" ? "no par" : pars.length ? `par ${Math.min(...pars)}–${Math.max(...pars)}` : "";
+    console.log(`  ${label.padEnd(24)} ${made.length} from ${tried} messages   ${variant.words === "free" ? "" : tiers}   ${parText}`);
+  }
+  if (kept.length === 0) return;
+  const dir = path.resolve(args.out, `run-${seed}-lab`);
+  await writeRun(dir, seed, kept);
+  console.log(`\nWrote ${kept.length} Lab puzzles to ${path.relative(process.cwd(), dir).split(path.sep).join("/")}/.`);
+  console.log(`Import them with: npm run seed -- ${path.relative(process.cwd(), dir).split(path.sep).join("/")} --lab`);
+}
+
+async function writeRun(dir: string, seed: string, kept: { id: string; label?: string; generated: GeneratedPuzzle }[]) {
   await mkdir(dir, { recursive: true });
   const manifest = { seed, engineVersion: ENGINE_VERSION, generatorVersion: GENERATOR_VERSION, createdAt: Date.now(), count: kept.length };
-  const puzzles = kept.map(({ id, generated: { puzzle } }) => ({
+  const puzzles = kept.map(({ id, label, generated: { puzzle } }) => ({
     id,
     ciphertext: puzzle.ciphertext,
     cribs: puzzle.cribs,
     difficulty: puzzle.difficulty,
     par: puzzle.par,
     length: puzzle.ciphertext.length,
+    ...(puzzle.variant ? { variant: puzzle.variant, label } : {}),
   }));
   const solutions = kept.map(({ id, generated }) => ({
     id,

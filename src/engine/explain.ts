@@ -39,6 +39,8 @@ export function describeMove(move: Move): string {
       return `Declare ${move.a}⇄${move.b}`;
     case "hint":
       return "Ask for a hint";
+    case "submit":
+      return "Submit the decryption";
   }
 }
 
