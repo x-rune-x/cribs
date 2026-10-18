@@ -6,7 +6,7 @@ I want a mobile-first web game with accounts, skill scores and, later, a premium
 
 - Read this whole brief first. Then reply with a plan before writing any code: repo layout, the engine's main types and functions, the database schema, and any questions where the brief is ambiguous or where you think a rule is a mistake. Wait for my go-ahead.
 - Build in the milestones at the end of this brief. At the end of each one, stop, summarise what changed, tell me how to run it, and commit.
-- Write the puzzle engine test-first. Keep it in `src/engine/` with no framework imports (no React, Next.js or database code), so the same code runs in the browser, on the server and in CLI scripts.
+- Write the puzzle engine test-first. Keep it in `src/engine/` with no framework imports (no Vue, Nuxt or database code), so the same code runs in the browser, on the server and in CLI scripts.
 - Check current docs for library versions and setup steps rather than relying on memory.
 - Never ship secrets or puzzle solutions to the client. Use `.env.local`, and keep `.env.example` up to date.
 
@@ -161,8 +161,8 @@ Expected results:
 
 Avoid vendor-specific platforms (no Supabase or Vercel-only features). Moving off the Pi should only take changes to environment variables and where the containers run.
 
-- **TypeScript** throughout, with pnpm.
-- **Next.js** (App Router), built with `output: "standalone"` so it runs as a plain Node server in a container.
+- **TypeScript** throughout, with npm.
+- **Nuxt 4**, built with Nitro's `node-server` preset so it runs as a plain Node server in a container.
 - **SQLite** with **Drizzle ORM** and its migrations.
   - Turn on WAL mode, a busy timeout and foreign keys.
   - Only the web server opens the database for writing. Scripts like the puzzle seeder run through the app (e.g. `docker compose exec web …`), not as a second process holding the file.
@@ -180,13 +180,13 @@ Avoid vendor-specific platforms (no Supabase or Vercel-only features). Moving of
 
 - **Hardware:** a Raspberry Pi 4 or 5 with at least 4 GB of RAM, running 64-bit Raspberry Pi OS. Ask me which model I have. Recommend booting from an SSD, because constant database writes wear out SD cards.
 - **Docker Compose** with these services:
-  - `web`: the Next.js standalone server, with the SQLite file on a named volume
+  - `web`: the Nuxt (Nitro node-server) server, with the SQLite file on a named volume
   - `litestream`: continuously replicates the database to S3-compatible storage (Cloudflare R2 or Backblaze B2), keeping 14 days of snapshots
   - `tunnel`: cloudflared
   - the daily-puzzle stock check
 
   Give every service a restart policy, and add a health-check endpoint. Document a restore onto a fresh machine (`litestream restore`) and test that it works.
-- **Builds:** build arm64 images off the Pi, either with `docker buildx` on my PC or in GitHub Actions pushing to GHCR. The Pi should never run `next build`. A single `deploy` script pulls the new image, runs migrations and restarts.
+- **Builds:** build arm64 images off the Pi, either with `docker buildx` on my PC or in GitHub Actions pushing to GHCR. The Pi should never run `nuxt build`. A single `deploy` script pulls the new image, runs migrations and restarts.
 - **Public access:**
   - Use a Cloudflare Tunnel on my own domain. It needs no port forwarding and works behind CGNAT.
   - If I don't have a domain yet, fall back to Tailscale Funnel.
@@ -235,8 +235,8 @@ Avoid vendor-specific platforms (no Supabase or Vercel-only features). Moving of
 ## Milestones
 
 1. **Engine and generator, no UI.**
-   - `pnpm test` passes, including the golden puzzle.
-   - `pnpm generate --count 30` writes puzzles and prints the stats above.
+   - `npm test` passes, including the golden puzzle.
+   - `npm run generate -- --count 30` writes puzzles and prints the stats above.
 2. **Playable game, anonymous players.**
    - Anonymous auth, daily and practice puzzles, server-checked moves, and an end screen.
    - Mobile-first, per the mockup. Keyboard play works too: arrow keys slide a crib, Enter locks it.
