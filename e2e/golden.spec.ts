@@ -29,7 +29,9 @@ test.beforeAll(async ({ request }) => {
 /** Picks a word, slides it to a 1-based spot with the arrow keys and locks it with Enter. */
 async function lockWithKeyboard(page: Page, crib: string, spot: number) {
   await page.getByRole("button", { name: crib, exact: true }).click();
-  for (let i = 1; i < spot; i++) await page.keyboard.press("ArrowRight");
+  const start = Number(await page.getByRole("slider", { name: `Position of ${crib}` }).getAttribute("aria-valuenow"));
+  const key = spot > start ? "ArrowRight" : "ArrowLeft";
+  for (let i = 0; i < Math.abs(spot - start); i++) await page.keyboard.press(key);
   await expect(page.getByRole("button", { name: `Lock ${crib} at ${spot}` })).toBeVisible();
   await page.keyboard.press("Enter");
 }
@@ -65,6 +67,16 @@ test("counts a wrong placement as a mistake and keeps the game across reloads", 
   await page.reload();
   await expect(page.getByRole("button", { name: "MILL, locked at 13" })).toBeVisible();
   await expect(page.getByText("1 of 5", { exact: true })).toBeAttached();
+});
+
+test("starts a newly picked word clear of locked words", async ({ page }) => {
+  await page.goto("/");
+  await lockWithKeyboard(page, "MEET", 1);
+  await expect(page.getByText("MEET locked at 1")).toBeVisible();
+
+  await page.getByRole("button", { name: "THE", exact: true }).click();
+  await expect(page.getByRole("slider", { name: "Position of THE" })).toHaveAttribute("aria-valuenow", "5");
+  await expect(page.getByRole("button", { name: "Lock THE at 5" })).toBeVisible();
 });
 
 test("never sends the solution before the game ends", async ({ page }) => {

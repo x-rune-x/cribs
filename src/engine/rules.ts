@@ -42,6 +42,18 @@ export function overlaps(a: Placement, b: Placement): boolean {
 }
 
 /**
+ * The first position where a crib doesn't overlap a locked crib, used as the
+ * starting point when a player picks a word. Overlaps are visible on the board,
+ * so this reveals nothing a preview shouldn't. Falls back to 0 if every position overlaps.
+ */
+export function firstClearPosition(ciphertext: string, crib: string, locked: readonly Placement[]): number {
+  for (let pos = 0; pos + crib.length <= ciphertext.length; pos++) {
+    if (!locked.some((other) => overlaps({ crib, pos }, other))) return pos;
+  }
+  return 0;
+}
+
+/**
  * Checks a placement against the rules, the known swaps and the locked cribs.
  * Returns the swaps it implies, or every reason it's impossible.
  */

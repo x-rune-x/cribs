@@ -10,6 +10,7 @@ import {
   describeHint,
   describePlacementReason,
   describeSwapReason,
+  firstClearPosition,
   formatPair,
   pair,
   pairsOf,
@@ -109,7 +110,7 @@ export function useGame() {
   function select(crib: string) {
     if (!playing.value || lockedCribs.value.has(crib) || selected.value === crib) return;
     selected.value = crib;
-    pos.value = 0;
+    pos.value = firstClearPosition(ciphertext.value, crib, game.value!.locked);
   }
 
   function cycle(direction: 1 | -1) {

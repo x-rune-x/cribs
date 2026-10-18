@@ -52,3 +52,11 @@ From `npm run generate -- --survey` over the 60 starter messages (20–31 letter
 - **What separates Easy from Medium:** every Easy puzzle has an L1-forced first move, and 98% of Medium puzzles have none. Medium means "one L2 insight to get started" (96% need exactly one L2 move).
 
 So, as defined, Hard puzzles essentially don't occur at these sizes. How to define a third tier is an open decision.
+
+## Design notes for harder tiers
+
+From the first playtest: the cribs come from one sensible English sentence, so their order can often be guessed by arranging them into a sentence, which skips some of the deduction. That's fine for Easy. Ideas to weigh when designing harder tiers:
+
+- **Fewer cribs than words**, so the cribs don't sketch the whole sentence. This needs the coverage rule relaxed, which fits the "read the last letters" tier.
+- **Messages with little grammar to lean on**, such as call signs, lists or coordinates ("RED FOX SILVER OWL TWO NINE").
+- **A decoy crib** that isn't in the message, so the player has to prove which words fit. This changes the brief's rule that every crib is in the plaintext.

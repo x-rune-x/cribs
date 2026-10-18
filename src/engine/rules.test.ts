@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { swapMapOf } from "./cipher";
 import { GOLDEN_CIPHERTEXT as CT } from "./fixtures/golden";
-import { checkPlacement, checkSwap, mergeSwaps, overlaps, scanPlacements } from "./rules";
+import { checkPlacement, checkSwap, firstClearPosition, mergeSwaps, overlaps, scanPlacements } from "./rules";
 
 // Golden ciphertext, 0-based:
 //  0U 1K 2K 3O 4G 5O 6O 7Y 8K 9T 10V 11R 12U 13W 14V 15V 16G 17O 18R 19G 20I 21X
@@ -105,6 +105,27 @@ describe("overlaps", () => {
     expect(overlaps({ crib: "MEET", pos: 0 }, { crib: "THE", pos: 4 })).toBe(false);
     expect(overlaps({ crib: "MEET", pos: 0 }, { crib: "THE", pos: 3 })).toBe(true);
     expect(overlaps({ crib: "THE", pos: 3 }, { crib: "MEET", pos: 0 })).toBe(true);
+  });
+});
+
+describe("firstClearPosition", () => {
+  it("starts at 0 when nothing is in the way", () => {
+    expect(firstClearPosition(CT, "THE", [])).toBe(0);
+    expect(firstClearPosition(CT, "THE", [{ crib: "MILL", pos: 12 }])).toBe(0);
+  });
+
+  it("skips past locked words at the start of the message", () => {
+    expect(firstClearPosition(CT, "THE", [{ crib: "MEET", pos: 0 }])).toBe(4);
+    expect(
+      firstClearPosition(CT, "DAWN", [
+        { crib: "MEET", pos: 0 },
+        { crib: "THE", pos: 4 },
+      ]),
+    ).toBe(7);
+  });
+
+  it("falls back to 0 when every spot overlaps", () => {
+    expect(firstClearPosition("ABCDEF", "XYZ", [{ crib: "PQRS", pos: 1 }])).toBe(0);
   });
 });
 
