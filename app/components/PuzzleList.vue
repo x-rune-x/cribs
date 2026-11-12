@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import type { PracticeItem } from "#shared/types/api";
-import { api, apiError } from "~/utils/api";
+import { apiError } from "~/utils/api";
+import { useBackend } from "~/utils/backend";
 
-const props = defineProps<{ endpoint: string; base: string }>();
+const props = defineProps<{ kind: "practice" | "lab"; base: string }>();
+const backend = useBackend();
 
 const items = ref<PracticeItem[] | null>(null);
 const error = ref<string | null>(null);
 
 onMounted(async () => {
   try {
-    items.value = await api<PracticeItem[]>(props.endpoint);
+    items.value = await backend.listPuzzles(props.kind);
   } catch (e) {
     error.value = apiError(e).message;
   }

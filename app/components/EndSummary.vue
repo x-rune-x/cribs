@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
+import { formatDuration, resultsText } from "#shared/share";
 import type { GameView } from "#shared/types/api";
 
 const props = defineProps<{ game: GameView }>();
@@ -7,15 +8,24 @@ const emit = defineEmits<{ again: [] }>();
 
 const won = computed(() => props.game.status === "won");
 const finished = computed(() => props.game.finished!);
-const time = computed(() => {
-  const seconds = Math.round(finished.value.durationMs / 1000);
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-});
+const time = computed(() => formatDuration(finished.value.durationMs));
 const versusPar = computed(() => {
   const diff = props.game.moves - props.game.puzzle.par;
   if (!won.value) return `par ${props.game.puzzle.par}`;
   return diff === 0 ? "on par" : diff < 0 ? `${-diff} under par` : `${diff} over par`;
 });
+
+/** Spoiler-free results to paste into a chat. Falls back to a text box if the clipboard is unavailable. */
+const results = computed(() => resultsText(props.game));
+const copy = ref<"idle" | "copied" | "manual">("idle");
+async function copyResults() {
+  try {
+    await navigator.clipboard.writeText(results.value);
+    copy.value = "copied";
+  } catch {
+    copy.value = "manual";
+  }
+}
 </script>
 
 <template>
@@ -49,14 +59,20 @@ const versusPar = computed(() => {
       Practice game{{ game.mode === "assisted" ? " with assist" : "" }}: not ranked.
     </p>
     <div class="actions">
-      <NuxtLink v-if="game.mode === 'ranked'" to="/practice" class="btn btn-primary">Practice puzzles</NuxtLink>
+      <button type="button" class="btn btn-primary" @click="copyResults">{{ copy === "copied" ? "Copied ✓" : "Copy results" }}</button>
+      <NuxtLink v-if="game.mode === 'ranked'" to="/practice" class="btn">Practice puzzles</NuxtLink>
       <template v-else>
-        <button type="button" class="btn btn-primary" @click="emit('again')">Play again</button>
+        <button type="button" class="btn" @click="emit('again')">Play again</button>
         <NuxtLink :to="game.puzzle.kind === 'lab' ? '/lab' : '/practice'" class="btn">
           {{ game.puzzle.kind === "lab" ? "All Lab puzzles" : "All practice puzzles" }}
         </NuxtLink>
       </template>
     </div>
+    <p class="visually-hidden" role="status">{{ copy === "copied" ? "Results copied" : "" }}</p>
+    <label v-if="copy === 'manual'" class="manual">
+      <span class="muted">Copy these results:</span>
+      <textarea readonly rows="4" :value="results" @focus="($event.target as HTMLTextAreaElement).select()" />
+    </label>
   </section>
 </template>
 
@@ -118,6 +134,23 @@ dd small {
 
 .note {
   font-size: 13px;
+}
+
+.manual {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.manual textarea {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--raised);
+  font-family: var(--mono);
+  font-size: 13px;
+  resize: none;
 }
 
 .actions {

@@ -7,7 +7,7 @@ useHead({ title: "Crib · Practice" });
     <div class="kicker">Archive</div>
     <h1 id="practice-title">Practice</h1>
     <p class="muted">Unranked puzzles to sharpen your skills. Assist mode is allowed here.</p>
-    <PuzzleList endpoint="/api/practice" base="/practice" />
+    <PuzzleList kind="practice" base="/practice" />
   </section>
 </template>
 

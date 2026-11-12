@@ -44,6 +44,18 @@ npm run test:e2e                # builds the app and plays the golden puzzle in 
 
 The end-to-end tests run the production build on port 3100 with a fresh database in `data/e2e/`.
 
+## Playtest site (GitHub Pages)
+
+A static build for playtesting with friends is published to **https://x-rune-x.github.io/cribs/** on every push to `main` ([.github/workflows/playtest.yml](.github/workflows/playtest.yml)). It plays entirely in the browser: the engine checks moves, each friend's games are saved in their browser, and every answer ships in `playtest-data.json`, so anyone curious can read them. The real, server-backed game is unchanged.
+
+- **Puzzle set:** [playtest.config.json](playtest.config.json) sets the seed, the first daily date, the number of days, practice puzzles and Lab puzzles per variant. The same config always gives the same puzzles.
+  - Raising `days` adds puzzles without changing earlier ones.
+  - Changing `seed` makes a whole new set, and friends' saved games start over.
+- **Feedback:** the end screen's "Copy results" button gives friends a spoiler-free summary to paste back to you.
+- **Build and preview locally:** `npm run playtest:build`, then `node e2e-playtest/serve.mjs` and open http://localhost:3200/cribs/.
+- **Test:** `npm run test:e2e:playtest`.
+- **One-time setup:** the repo has to be public (or on GitHub Pro). In Settings → Pages, set Source to "GitHub Actions".
+
 ## Generating puzzles
 
 Messages live in [content/messages.txt](content/messages.txt), one per line. Edit them freely, then check them:

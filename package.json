@@ -19,7 +19,9 @@
     "generate": "tsx scripts/generate.ts",
     "seed": "tsx scripts/seed.ts",
     "db:migration": "drizzle-kit generate",
-    "auth:schema": "npx -y auth@1.7.10 generate --config server/auth/schema.config.ts --adapter drizzle --dialect sqlite --output server/db/auth-schema.ts --yes"
+    "auth:schema": "npx -y auth@1.7.10 generate --config server/auth/schema.config.ts --adapter drizzle --dialect sqlite --output server/db/auth-schema.ts --yes",
+    "playtest:build": "tsx scripts/build-playtest.ts",
+    "test:e2e:playtest": "playwright test --config playwright.playtest.config.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",

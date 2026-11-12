@@ -10,7 +10,7 @@ useHead({ title: "Crib · Lab" });
       Trial rule variants for a harder mode: fewer words, a decoy word, bringing your own words, and blind placement
       that's only checked when you submit. Unranked. Tell us which ones feel good.
     </p>
-    <PuzzleList endpoint="/api/lab" base="/lab" />
+    <PuzzleList kind="lab" base="/lab" />
   </section>
 </template>
 

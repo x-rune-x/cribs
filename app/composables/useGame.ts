@@ -22,8 +22,9 @@ import {
   scanPlacements,
   toMove,
 } from "#engine";
-import type { GameView, MoveResponse, StartGameRequest } from "#shared/types/api";
-import { type ApiError, api, apiError } from "~/utils/api";
+import type { GameView, StartGameRequest } from "#shared/types/api";
+import { type ApiError, apiError } from "~/utils/api";
+import { useBackend } from "~/utils/backend";
 
 export interface Feedback {
   tone: "good" | "bad" | "info";
@@ -43,6 +44,7 @@ type LetterMap = Partial<Record<Letter, Letter>>;
 
 /** Client-side play: previews use only public data, and every checked move goes to the server. */
 export function useGame() {
+  const backend = useBackend();
   const game = ref<GameView | null>(null);
   const loadError = ref<ApiError | null>(null);
   const busy = ref(false);
@@ -139,7 +141,7 @@ export function useGame() {
     busy.value = true;
     loadError.value = null;
     try {
-      game.value = await api<GameView>("/api/games", { method: "POST", body: request });
+      game.value = await backend.startGame(request);
       selected.value = null;
       feedback.value = null;
       tried.value = [];
@@ -186,7 +188,7 @@ export function useGame() {
     if (!g || busy.value || !playing.value) return;
     busy.value = true;
     try {
-      const response = await api<MoveResponse>(`/api/games/${g.id}/moves`, { method: "POST", body: move });
+      const response = await backend.move(g.id, move);
       game.value = response.game;
       feedback.value = describeResult(move, response.result, response.game);
       if (move.kind === "lock" && response.result.kind === "lock" && response.result.correct) selected.value = null;
@@ -250,7 +252,7 @@ export function useGame() {
     const g = game.value;
     if (!g || g.mode !== "practice") return;
     try {
-      game.value = await api<GameView>(`/api/games/${g.id}/assist`, { method: "POST" });
+      game.value = await backend.enableAssist(g.id);
     } catch (error) {
       feedback.value = { tone: "bad", text: apiError(error).message };
     }

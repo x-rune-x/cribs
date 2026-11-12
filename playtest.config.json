@@ -1,0 +1,8 @@
+{
+  "seed": "friends-1",
+  "start": "2026-11-12",
+  "days": 21,
+  "practice": 12,
+  "perVariant": 3,
+  "base": "/cribs/"
+}

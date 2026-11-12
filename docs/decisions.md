@@ -38,6 +38,7 @@ Changes to, and clarifications of, [the brief](brief.md), agreed during planning
 20. **Rate limits are kept in memory:** 30 moves and 20 game starts per player per minute. That's enough for one server process; several instances would need a shared store.
 21. **Starting today's game starts its clock**, so the server measures time from the first visit. Time only breaks ties.
 22. **Practice games resume** where the player left off. After a practice game ends, "Play again" starts a fresh one; the ranked daily game can't be replayed.
+23. **A static playtest build on GitHub Pages ships the answers to the browser.** It's accepted for playtests with friends only. A build switch (`NUXT_PUBLIC_BACKEND=static`) swaps the API for a browser backend that runs the same engine and saves games in localStorage. The server version stays the real game: anything ranked, such as the leaderboard and streaks, will only exist there.
 
 ## Generator findings (milestone 1)
 
